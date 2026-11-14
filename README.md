@@ -23,6 +23,16 @@ Berjalan di **Cloudflare Pages + D1** (gratis), kode disimpan di **GitHub**.
 - Hari libur (ditetapkan guru/admin) tidak dihitung target.
 - Perubahan target menyimpan riwayat, sehingga perhitungan hari-hari lalu tetap adil.
 
+**Program OWOJ (One Week One Juz)** — menu 🗓️ OWOJ
+- Setiap pekan, siswa (dan guru) **memilih sendiri juz** yang akan dibaca dari peta 30 juz kelompoknya.
+- Default: satu juz untuk satu orang, sehingga kelompok bisa **khatam 30 juz bersama** tiap pekan. Bisa diubah agar satu juz boleh dipilih beberapa orang.
+- Mode baca juz berurutan dengan tombol ✓ per halaman (tajwid, latin, terjemah, dan murottal tetap tersedia), saran halaman per hari, dan pengingat di beranda.
+- Pilihan juz bisa diganti/dibatalkan selama belum mulai dibaca. Juz yang tidak selesai sampai akhir pekan tercatat "tidak tuntas".
+- Setiap juz OWOJ yang tuntas mendapat poin (default 50) yang ikut dijumlahkan di peringkat.
+- Guru: rekap peserta (sudah/belum memilih, progres, tuntas), unduh CSV, riwayat pekan-pekan sebelumnya.
+- Admin (Pengaturan): aktif/nonaktif, hari awal pekan (default Senin), aturan pembagian juz, poin OWOJ.
+- Bacaan OWOJ dicatat terpisah dan **tidak mengubah** target/hutang tadarus harian.
+
 **Guru**: rekap kelompok (tuntas/belum, hutang, tabungan, poin, posisi halaman, 7 hari terakhir), unduh CSV/cetak, atur target, hari aktif, jeda minimal per halaman, hari libur, pengumuman, peringkat, detail siswa (setor bacaan manual, target khusus, titik mulai).
 
 **Admin**: dasbor, kelompok, pengguna (tambah, ubah, reset password, nonaktifkan, **impor CSV/Excel massal** + cetak kartu akun), libur global, pengaturan (nama lembaga, logo, poin).
@@ -45,7 +55,7 @@ Buka file `wrangler.toml`, ganti `GANTI_DENGAN_DATABASE_ID_ANDA` dengan Database
 ### 3. Unggah ke GitHub
 1. Buat repository baru di GitHub, misalnya `tadarus` (boleh Private).
 2. Unggah **seluruh isi folder ini** (bukan folder `node_modules`): `public/`, `functions/`, `schema.sql`, `wrangler.toml`, `package.json`, `README.md`, `.gitignore`.
-   - Lewat web: **Add file → Upload files** → seret semua file/folder → **Commit**.
+   - Lewat web: ekstrak zip ke sebuah folder, buka folder tersebut, **pilih semua isinya** (Ctrl+A) lalu seret ke halaman **Add file → Upload files** → **Commit changes**. Jumlah file di bawah 100, jadi bisa sekali unggah. Jangan ikutkan folder `node_modules` atau `.wrangler` bila ada.
    - Atau lewat terminal:
      ```bash
      git init && git add . && git commit -m "Aplikasi tadarus"
@@ -99,7 +109,7 @@ npm run dev           # buka http://localhost:8788
 ## Struktur
 ```
 public/            tampilan (HTML, CSS, JS, PWA) + data mushaf
-  quran/p/1..604   teks Al-Qur'an per halaman (Arab + terjemah)
+  quran/h/1..31    teks Al-Qur'an (Arab, terjemah, latin), tiap file berisi 20 halaman
   quran/meta.json  daftar surah & juz
   fonts/           font mushaf (Scheherazade New; tambahkan lpmq.ttf bila ada)
 functions/api/     API (Cloudflare Pages Functions)

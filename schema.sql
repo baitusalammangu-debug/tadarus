@@ -95,3 +95,32 @@ INSERT OR IGNORE INTO pengaturan (kunci, nilai) VALUES
  ('poin_harian', '10'),
  ('poin_khatam', '100'),
  ('default_halaman_per_hari', '2');
+
+-- =========================================================
+--  PROGRAM OWOJ (One Week One Juz)
+-- =========================================================
+CREATE TABLE IF NOT EXISTS owoj_pilihan (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  kelompok_id INTEGER NOT NULL DEFAULT 0,   -- grup OWOJ = kelompok (0 = tanpa kelompok)
+  pekan TEXT NOT NULL,                      -- tanggal awal pekan (YYYY-MM-DD)
+  juz INTEGER NOT NULL,
+  dibuat TEXT DEFAULT (datetime('now')),
+  selesai_pada TEXT,
+  UNIQUE (user_id, pekan)
+);
+CREATE INDEX IF NOT EXISTS idx_owoj_pk ON owoj_pilihan(pekan, kelompok_id);
+
+CREATE TABLE IF NOT EXISTS owoj_baca (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pilihan_id INTEGER NOT NULL,
+  halaman INTEGER NOT NULL,
+  waktu TEXT DEFAULT (datetime('now')),
+  UNIQUE (pilihan_id, halaman)
+);
+
+INSERT OR IGNORE INTO pengaturan (kunci, nilai) VALUES
+ ('owoj_aktif', '1'),
+ ('owoj_hari_mulai', '1'),      -- 0=Ahad, 1=Senin, ... 5=Jumat
+ ('owoj_juz_unik', '1'),        -- 1 = satu juz hanya boleh dipilih satu orang per kelompok per pekan
+ ('owoj_poin', '50');           -- poin untuk setiap juz OWOJ yang tuntas
