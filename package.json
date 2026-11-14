@@ -1,0 +1,10 @@
+{
+  "name": "tadarus",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler pages dev public --d1 DB=tadarus-db",
+    "db:local": "wrangler d1 execute tadarus-db --local --file=schema.sql",
+    "db:remote": "wrangler d1 execute tadarus-db --remote --file=schema.sql"
+  },
+  "devDependencies": { "wrangler": "^4" }
+}

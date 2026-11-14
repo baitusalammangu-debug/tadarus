@@ -1,0 +1,8 @@
+name = "tadarus"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tadarus-db"
+database_id = "c43d70c5-6956-4f73-a266-5a2a991fa66e"
