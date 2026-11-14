@@ -22,9 +22,11 @@ for a in ayat:
     p = a['page_number']
     pages.setdefault(p, {'p': p, 'j': a['juz_id'], 'v': []})
     pages[p]['v'].append([a['surah_id'], a['verse_number'], bersih(a['verse_arabic']), bersih(a['verse_bahasa']), bersih(LAT[(a['surah_id'], a['verse_number'])])])
-os.makedirs(os.path.join(out, 'p'), exist_ok=True)
-for p, d in pages.items():
-    json.dump(d, open(os.path.join(out, 'p', f'{p}.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
+# digabung per 20 halaman (31 file) agar mudah diunggah ke GitHub (batas 100 file per unggahan web)
+os.makedirs(os.path.join(out, 'h'), exist_ok=True)
+for k in range(31):
+    blok = {p: pages[p] for p in range(20 * k + 1, min(604, 20 * k + 20) + 1)}
+    json.dump(blok, open(os.path.join(out, 'h', f'{k + 1}.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
 latin = ["Al-Fatihah","Al-Baqarah","Ali 'Imran","An-Nisa'","Al-Ma'idah","Al-An'am","Al-A'raf","Al-Anfal","At-Taubah","Yunus","Hud","Yusuf","Ar-Ra'd","Ibrahim","Al-Hijr","An-Nahl","Al-Isra'","Al-Kahf","Maryam","Taha","Al-Anbiya'","Al-Hajj","Al-Mu'minun","An-Nur","Al-Furqan","Asy-Syu'ara'","An-Naml","Al-Qasas","Al-'Ankabut","Ar-Rum","Luqman","As-Sajdah","Al-Ahzab","Saba'","Fatir","Yasin","As-Saffat","Sad","Az-Zumar","Gafir","Fussilat","Asy-Syura","Az-Zukhruf","Ad-Dukhan","Al-Jasiyah","Al-Ahqaf","Muhammad","Al-Fath","Al-Hujurat","Qaf","Az-Zariyat","At-Tur","An-Najm","Al-Qamar","Ar-Rahman","Al-Waqi'ah","Al-Hadid","Al-Mujadilah","Al-Hasyr","Al-Mumtahanah","As-Saff","Al-Jumu'ah","Al-Munafiqun","At-Tagabun","At-Talaq","At-Tahrim","Al-Mulk","Al-Qalam","Al-Haqqah","Al-Ma'arij","Nuh","Al-Jinn","Al-Muzzammil","Al-Muddassir","Al-Qiyamah","Al-Insan","Al-Mursalat","An-Naba'","An-Nazi'at","'Abasa","At-Takwir","Al-Infitar","Al-Mutaffifin","Al-Insyiqaq","Al-Buruj","At-Tariq","Al-A'la","Al-Gasyiyah","Al-Fajr","Al-Balad","Asy-Syams","Al-Lail","Ad-Duha","Asy-Syarh","At-Tin","Al-'Alaq","Al-Qadr","Al-Bayyinah","Az-Zalzalah","Al-'Adiyat","Al-Qari'ah","At-Takasur","Al-'Asr","Al-Humazah","Al-Fil","Quraisy","Al-Ma'un","Al-Kausar","Al-Kafirun","An-Nasr","Al-Lahab","Al-Ikhlas","Al-Falaq","An-Nas"]
 mulai = {}
 for a in ayat:
@@ -35,7 +37,8 @@ for ch in info['chapters']:
     surah.append([n, latin[n-1], ch['arabicname'], len(ch['verses']), mulai[n], 'Makkiyah' if ch['revelation'] == 'Mecca' else 'Madaniyah'])
 juz = []
 for j in range(1, 31):
-    juz.append([j, min(a['page_number'] for a in ayat if a['juz_id'] == j)])
+    hs = [a['page_number'] for a in ayat if a['juz_id'] == j]
+    juz.append([j, min(hs), max(hs)])  # [juz, halaman awal, halaman akhir]
 basmalah = bersih(ayat[0]['verse_arabic'])
 json.dump({'surah': surah, 'juz': juz, 'pages': len(pages), 'basmalah': basmalah, 'sumber': 'Kemenag RI'}, open(os.path.join(out, 'meta.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
 print('halaman:', len(pages), '| juz:', juz[:3], '...')
