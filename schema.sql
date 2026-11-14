@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS owoj_baca (
   pilihan_id INTEGER NOT NULL,
   halaman INTEGER NOT NULL,
   waktu TEXT DEFAULT (datetime('now')),
+  sumber TEXT DEFAULT 'app',             -- app / cetak (lapor baca mushaf cetak)
   UNIQUE (pilihan_id, halaman)
 );
 
@@ -123,4 +124,8 @@ INSERT OR IGNORE INTO pengaturan (kunci, nilai) VALUES
  ('owoj_aktif', '1'),
  ('owoj_hari_mulai', '1'),      -- 0=Ahad, 1=Senin, ... 5=Jumat
  ('owoj_juz_unik', '1'),        -- 1 = satu juz hanya boleh dipilih satu orang per kelompok per pekan
- ('owoj_poin', '50');           -- poin untuk setiap juz OWOJ yang tuntas
+ ('owoj_poin', '50'),           -- poin untuk setiap juz OWOJ yang tuntas
+ ('owoj_hitung_tadarus', '1'),  -- halaman OWOJ ikut memenuhi target tadarus harian
+ ('target_guru', '2'),          -- target tadarus harian guru (halaman)
+ ('tadarus_guru_aktif', '1'),
+ ('izin_cetak', '1');           -- boleh melapor baca dari mushaf cetak

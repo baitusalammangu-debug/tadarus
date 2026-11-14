@@ -1,6 +1,6 @@
 // Service worker: cache aplikasi & halaman mushaf (bisa dibaca offline) + pengingat harian
-const VERSI = 'tadarus-v4';
-const SHELL = ['/', '/index.html', '/style.css?v=3', '/tajwid.js?v=3', '/app.js?v=3', '/manifest.json', '/icons/icon-192.png', '/quran/meta.json', '/fonts/scheherazade-new.woff2'];
+const VERSI = 'tadarus-v5';
+const SHELL = ['/', '/index.html', '/style.css?v=4', '/tajwid.js?v=4', '/app.js?v=4', '/manifest.json', '/icons/icon-192.png', '/quran/meta.json', '/fonts/scheherazade-new.woff2'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSI).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -62,7 +62,9 @@ async function ambilPengaturan(db) {
 // =========================================================
 // jadwalK: jadwal kelompok, jadwalS: jadwal khusus siswa (urut mulai ASC)
 // liburSet: Set tanggal libur, logHarian: {tanggal: jumlah}
-function hitungStatus({ siswa, kelompok, jadwalK, jadwalS, liburSet, logHarian, pengaturan, hariIni, riwayatHari = 0 }) {
+// logOwoj: {tanggal: jumlah halaman OWOJ} — ikut memenuhi target harian, tetapi tidak menggeser posisi khatam tadarus
+// targetBawaan: target bila tidak ada jadwal (mis. target harian guru)
+function hitungStatus({ siswa, kelompok, jadwalK, jadwalS, liburSet, logHarian, logOwoj = {}, targetBawaan = 0, pengaturan, hariIni, riwayatHari = 0 }) {
   const poinHarian = parseInt(pengaturan.poin_harian || '10');
   const poinKhatam = parseInt(pengaturan.poin_khatam || '100');
   const hariAktif = (kelompok?.hari_aktif ?? '0123456');
@@ -74,12 +76,13 @@ function hitungStatus({ siswa, kelompok, jadwalK, jadwalS, liburSet, logHarian, 
     for (const j of jadwalS) if (j.mulai <= tgl) v = j.halaman_per_hari;
     if (v !== null) return v;
     for (const j of jadwalK) if (j.mulai <= tgl) v = j.halaman_per_hari;
-    return v ?? 0;
+    return v ?? targetBawaan;
   };
 
   // total bacaan sebelum tanggal mulai (jika ada) tetap dihitung
-  let kum = 0;
-  for (const [t, n] of Object.entries(logHarian)) if (t < mulai) kum += n;
+  let kum = 0, totalTadarus = 0;
+  for (const [t, n] of Object.entries(logHarian)) { totalTadarus += n; if (t < mulai) kum += n; }
+  for (const [t, n] of Object.entries(logOwoj)) if (t < mulai) kum += n;
 
   let wajib = 0, poin = 0, hariTepat = 0, hariTerjadwal = 0, streak = 0;
   let wajibKemarin = 0;
@@ -90,7 +93,7 @@ function hitungStatus({ siswa, kelompok, jadwalK, jadwalS, liburSet, logHarian, 
     for (let t = mulai; t <= hariIni; t = tambahHari(t, 1)) {
       const ppd = efektif(t);
       const terjadwal = ppd > 0 && hariAktif.includes(String(hariKe(t))) && !liburSet.has(t);
-      const dibaca = logHarian[t] || 0;
+      const dibaca = (logHarian[t] || 0) + (logOwoj[t] || 0);
       kum += dibaca;
       if (terjadwal) wajib += ppd;
       let status = terjadwal ? (kum >= wajib ? 'tepat' : (t === hariIni ? 'belum' : 'kurang')) : (liburSet.has(t) ? 'libur' : 'bebas');
@@ -106,9 +109,10 @@ function hitungStatus({ siswa, kelompok, jadwalK, jadwalS, liburSet, logHarian, 
   }
   // bacaan bertanggal setelah hari ini (seharusnya tidak ada)
   for (const [t, n] of Object.entries(logHarian)) if (t > hariIni) kum += n;
+  for (const [t, n] of Object.entries(logOwoj)) if (t > hariIni) kum += n;
 
-  const total = kum;
-  const posisi = halamanMulai - 1 + total;          // jumlah halaman yang telah dilewati dari awal mushaf
+  const total = kum;                                 // tadarus + OWOJ (untuk target)
+  const posisi = halamanMulai - 1 + totalTadarus;          // jumlah halaman yang telah dilewati dari awal mushaf
   const khatam = Math.floor(posisi / TOTAL_HALAMAN);
   const halamanBerikut = (posisi % TOTAL_HALAMAN) + 1;
   poin += khatam * poinKhatam;
@@ -117,12 +121,14 @@ function hitungStatus({ siswa, kelompok, jadwalK, jadwalS, liburSet, logHarian, 
   const hutang = Math.max(0, wajibKemarin - total);
   const sisaHariIni = Math.max(0, wajib - total);    // termasuk hutang
   const spare = Math.max(0, total - wajib);
-  const dibacaHariIni = logHarian[hariIni] || 0;
+  const dibacaHariIni = (logHarian[hariIni] || 0) + (logOwoj[hariIni] || 0);
 
   return {
     tgl_mulai: mulai,
     halaman_mulai: halamanMulai,
     total_dibaca: total,
+    total_tadarus: totalTadarus,
+    dibaca_owoj_hari_ini: logOwoj[hariIni] || 0,
     halaman_berikut: halamanBerikut,
     khatam,
     progres_khatam: +(((posisi % TOTAL_HALAMAN) / TOTAL_HALAMAN) * 100).toFixed(1),
@@ -143,15 +149,17 @@ function hitungStatus({ siswa, kelompok, jadwalK, jadwalS, liburSet, logHarian, 
   };
 }
 
-function pesanNotif(s, nama) {
-  const n = nama.split(' ')[0];
+function pesanNotif(s, nama, peran = 'siswa') {
+  const g = peran !== 'siswa';
+  const n = g ? nama : nama.split(' ')[0];
+  const kamu = g ? 'Anda' : 'kamu';
   if (!s.terjadwal_hari_ini && s.hutang === 0) return { jenis: 'info', teks: `Hari ini tidak ada jadwal tadarus, ${n}. Tetap boleh membaca untuk menabung halaman.` };
   if (s.selesai_hari_ini) {
-    if (s.spare > 0) return { jenis: 'sukses', teks: `Alhamdulillah, target hari ini tuntas! Kamu punya tabungan ${s.spare} halaman untuk hari berikutnya.` };
+    if (s.spare > 0) return { jenis: 'sukses', teks: `Alhamdulillah, target hari ini tuntas! ${g ? 'Anda' : 'Kamu'} punya tabungan ${s.spare} halaman untuk hari berikutnya.` };
     return { jenis: 'sukses', teks: `Alhamdulillah, target tadarus hari ini sudah tuntas. Barakallahu fiik, ${n}!` };
   }
-  if (s.hutang > 0) return { jenis: 'bahaya', teks: `${n}, kamu punya hutang ${s.hutang} halaman. Hari ini wajib membaca ${s.sisa_hari_ini} halaman (target ${s.target_hari_ini} + hutang).` };
-  return { jenis: 'peringatan', teks: `${n}, hari ini kamu wajib membaca ${s.sisa_hari_ini} halaman, mulai halaman ${s.halaman_berikut}.` };
+  if (s.hutang > 0) return { jenis: 'bahaya', teks: `${n}, ${kamu} punya hutang ${s.hutang} halaman. Hari ini wajib membaca ${s.sisa_hari_ini} halaman (target ${s.target_hari_ini} + hutang).` };
+  return { jenis: 'peringatan', teks: `${n}, hari ini ${kamu} wajib membaca ${s.sisa_hari_ini} halaman${s.dibaca_hari_ini ? ' lagi' : ''}, mulai halaman ${s.halaman_berikut}. Halaman OWOJ juga ikut terhitung.` };
 }
 
 // Memuat data yang dibutuhkan untuk menghitung banyak siswa sekaligus
@@ -175,6 +183,15 @@ async function statusBanyakSiswa(db, daftarSiswa, pengaturan, riwayatHari = 0) {
     owojMap = Object.fromEntries(ow.results.map((r) => [r.user_id, r.n]));
   } catch {}
   const poinOwoj = parseInt(pengaturan.owoj_poin ?? '50');
+  const owojLog = {};
+  if ((pengaturan.owoj_hitung_tadarus ?? '1') !== '0') {
+    try {
+      const ol = await db.prepare(`SELECT p.user_id, date(b.waktu, '+7 hours') AS t, COUNT(*) n FROM owoj_baca b JOIN owoj_pilihan p ON p.id = b.pilihan_id
+        WHERE p.user_id IN (${ph(ids)}) GROUP BY p.user_id, t`).bind(...ids).all();
+      for (const r of ol.results) (owojLog[r.user_id] ||= {})[r.t] = r.n;
+    } catch {}
+  }
+  const targetGuru = (pengaturan.tadarus_guru_aktif ?? '1') !== '0' ? parseInt(pengaturan.target_guru ?? '2') : 0;
   const logMap = {};
   for (const r of log.results) (logMap[r.siswa_id] ||= {})[r.tanggal] = r.n;
 
@@ -188,6 +205,8 @@ async function statusBanyakSiswa(db, daftarSiswa, pengaturan, riwayatHari = 0) {
       jadwalS: jad.results.filter((j) => j.siswa_id === s.id),
       liburSet,
       logHarian: logMap[s.id] || {},
+      logOwoj: owojLog[s.id] || {},
+      targetBawaan: s.peran === 'guru' ? targetGuru : 0,
       pengaturan,
       hariIni,
       riwayatHari,
@@ -261,10 +280,16 @@ const SKEMA = [
  "INSERT OR IGNORE INTO pengaturan (kunci, nilai) VALUES ('owoj_aktif', '1'), ('owoj_hari_mulai', '1'), ('owoj_juz_unik', '1'), ('owoj_poin', '50')"
 ];
 let skemaSiap = false;
+const MIGRASI = [
+  "ALTER TABLE owoj_baca ADD COLUMN sumber TEXT DEFAULT 'app'",
+  "INSERT OR IGNORE INTO pengaturan (kunci, nilai) VALUES ('target_guru','2'),('tadarus_guru_aktif','1'),('owoj_hitung_tadarus','1'),('izin_cetak','1')",
+];
 async function pastikanSkema(db) {
   if (skemaSiap) return;
   const ada = await db.prepare(`SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('users','pengaturan','kelompok','jadwal','libur','bacaan','sesi','pengumuman','owoj_pilihan','owoj_baca')`).first();
   if (!ada || ada.n < 10) await db.batch(SKEMA.map((s) => db.prepare(s)));
+  // migrasi kolom baru (aman diulang; error "duplicate column" diabaikan)
+  for (const m of MIGRASI) { try { await db.prepare(m).run(); } catch {} }
   skemaSiap = true;
 }
 
@@ -344,16 +369,17 @@ const HANDLER = {
 
   // ---------- SISWA ----------
   'GET /saya/status': async ({ db, u, url }) => {
-    wajibPeran(u, 'siswa');
+    wajibPeran(u, 'siswa', 'guru', 'admin');
     const p = await ambilPengaturan(db);
     const hari = Math.min(400, parseInt(url.searchParams.get('riwayat') || '42'));
     const s = await db.prepare(`SELECT ${kolomSiswa} FROM users WHERE id = ?`).bind(u.id).first();
+    if (!s.tgl_mulai) { s.tgl_mulai = hariIniWIB(); await db.prepare('UPDATE users SET tgl_mulai = ? WHERE id = ?').bind(s.tgl_mulai, u.id).run(); }
     const [r] = await statusBanyakSiswa(db, [s], p, hari);
     const pengumuman = await db.prepare('SELECT p.*, u.nama AS oleh_nama FROM pengumuman p LEFT JOIN users u ON u.id = p.oleh WHERE p.kelompok_id IS NULL OR p.kelompok_id = ? ORDER BY p.id DESC LIMIT 5').bind(s.kelompok_id || 0).all();
     const terakhir = await db.prepare('SELECT waktu FROM bacaan WHERE siswa_id = ? ORDER BY id DESC LIMIT 1').bind(u.id).first();
     return json({
       ...r.status,
-      notif: pesanNotif(r.status, u.nama),
+      notif: pesanNotif(r.status, u.nama, u.peran),
       min_detik: r.kelompok?.min_detik ?? 30,
       terakhir_baca: terakhir?.waktu || null,
       pengumuman: pengumuman.results,
@@ -363,7 +389,7 @@ const HANDLER = {
 
   // tandai halaman selesai dibaca (harus berurutan)
   'POST /saya/baca': async ({ db, u, body }) => {
-    wajibPeran(u, 'siswa');
+    wajibPeran(u, 'siswa', 'guru', 'admin');
     const p = await ambilPengaturan(db);
     const s = await db.prepare(`SELECT ${kolomSiswa} FROM users WHERE id = ?`).bind(u.id).first();
     const [r] = await statusBanyakSiswa(db, [s], p);
@@ -376,12 +402,12 @@ const HANDLER = {
     }
     await db.prepare('INSERT INTO bacaan (siswa_id, halaman, tanggal, sumber, oleh) VALUES (?,?,?,?,?)').bind(u.id, hlm, hariIniWIB(), 'app', u.id).run();
     const [r2] = await statusBanyakSiswa(db, [s], p);
-    return json({ ...r2.status, notif: pesanNotif(r2.status, u.nama), khatam_baru: r2.status.khatam > r.status.khatam });
+    return json({ ...r2.status, notif: pesanNotif(r2.status, u.nama, u.peran), khatam_baru: r2.status.khatam > r.status.khatam });
   },
 
   // batalkan tanda terakhir (hanya bacaan hari ini lewat aplikasi)
   'POST /saya/batal': async ({ db, u }) => {
-    wajibPeran(u, 'siswa');
+    wajibPeran(u, 'siswa', 'guru', 'admin');
     const row = await db.prepare(`SELECT id FROM bacaan WHERE siswa_id = ? AND tanggal = ? AND sumber = 'app' ORDER BY id DESC LIMIT 1`).bind(u.id, hariIniWIB()).first();
     if (!row) throw new HttpError('Tidak ada bacaan hari ini yang bisa dibatalkan');
     const last = await db.prepare('SELECT id FROM bacaan WHERE siswa_id = ? ORDER BY id DESC LIMIT 1').bind(u.id).first();
@@ -681,7 +707,7 @@ const HANDLER = {
 
   'PUT /pengaturan': async ({ db, u, body }) => {
     wajibPeran(u, 'admin');
-    const izin = ['nama_lembaga', 'sub_judul', 'poin_harian', 'poin_khatam', 'default_halaman_per_hari', 'logo', 'owoj_aktif', 'owoj_hari_mulai', 'owoj_juz_unik', 'owoj_poin'];
+    const izin = ['nama_lembaga', 'sub_judul', 'poin_harian', 'poin_khatam', 'default_halaman_per_hari', 'logo', 'owoj_aktif', 'owoj_hari_mulai', 'owoj_juz_unik', 'owoj_poin', 'owoj_hitung_tadarus', 'target_guru', 'tadarus_guru_aktif', 'izin_cetak'];
     const stmts = Object.entries(body).filter(([k]) => izin.includes(k))
       .map(([k, v]) => db.prepare('INSERT INTO pengaturan (kunci, nilai) VALUES (?,?) ON CONFLICT(kunci) DO UPDATE SET nilai = excluded.nilai').bind(k, String(v ?? '')));
     if (stmts.length) await db.batch(stmts);
@@ -758,7 +784,7 @@ async function infoPekan(db) {
   const hi = hariIniWIB();
   const pk = pekanDari(hi, parseInt(p.owoj_hari_mulai));
   const sisa = Math.round((Date.parse(pk.akhir) - Date.parse(hi)) / 864e5) + 1;
-  return { p, hari_ini: hi, pekan: pk.mulai, akhir: pk.akhir, sisa_hari: sisa };
+  return { p, hari_ini: hi, pekan: pk.mulai, akhir: pk.akhir, sisa_hari: sisa, pekan_depan: tambahHari(pk.mulai, 7) };
 }
 // kelompok OWOJ seorang pengguna: siswa → kelompoknya; guru → kelompok yang dipilih (miliknya)
 async function kelompokOwoj(db, u, kid) {
@@ -795,7 +821,9 @@ Object.assign(HANDLER, {
     const kid = await kelompokOwoj(db, u, url.searchParams.get('kelompok_id'));
     const pekan = validTgl(url.searchParams.get('pekan')) ? pekanDari(url.searchParams.get('pekan'), parseInt(I.p.owoj_hari_mulai)).mulai : I.pekan;
     const saya = await pilihanAktif(db, u.id, I.pekan);
+    const sayaDepan = await pilihanAktif(db, u.id, I.pekan_depan);
     const peta = await petaJuz(db, kid, pekan);
+    const petaDepan = await petaJuz(db, kid, I.pekan_depan);
     const riwayat = await db.prepare(`SELECT p.pekan, p.juz, p.selesai_pada, (SELECT COUNT(*) FROM owoj_baca b WHERE b.pilihan_id = p.id) AS dibaca
       FROM owoj_pilihan p WHERE p.user_id = ? ORDER BY p.pekan DESC LIMIT 12`).bind(u.id).all();
     const kelompok = kid ? await db.prepare('SELECT id, nama, min_detik FROM kelompok WHERE id = ?').bind(kid).first() : null;
@@ -811,6 +839,8 @@ Object.assign(HANDLER, {
       aktif: I.p.owoj_aktif !== '0', hari_ini: I.hari_ini, pekan, pekan_ini: I.pekan, akhir: pekanDari(pekan, parseInt(I.p.owoj_hari_mulai)).akhir, sisa_hari: I.sisa_hari,
       juz_unik: I.p.owoj_juz_unik !== '0', poin: parseInt(I.p.owoj_poin), kelompok, kelompok_id: kid, kelompok_saya: kelompokSaya,
       saya, peta, riwayat: riwayat.results, ringkas, min_detik: kelompok?.min_detik ?? 30,
+      pekan_depan: I.pekan_depan, akhir_depan: tambahHari(I.pekan_depan, 6), saya_depan: sayaDepan, peta_depan: petaDepan,
+      izin_cetak: (I.p.izin_cetak ?? '1') !== '0',
     });
   },
 
@@ -821,21 +851,23 @@ Object.assign(HANDLER, {
     const juz = parseInt(body.juz);
     if (!(juz >= 1 && juz <= 30)) throw new HttpError('Juz tidak valid');
     const kid = await kelompokOwoj(db, u, body.kelompok_id);
-    const lama = await pilihanAktif(db, u.id, I.pekan);
+    const depan = body.untuk === 'depan';
+    const pekan = depan ? I.pekan_depan : I.pekan;
+    const lama = await pilihanAktif(db, u.id, pekan);
     if (lama && lama.dibaca > 0) throw new HttpError(`Anda sudah mulai membaca Juz ${lama.juz} pekan ini, tidak bisa mengganti juz.`);
     if (I.p.owoj_juz_unik !== '0') {
-      const ada = await db.prepare('SELECT u.nama FROM owoj_pilihan p JOIN users u ON u.id = p.user_id WHERE p.pekan = ? AND p.kelompok_id = ? AND p.juz = ? AND p.user_id != ?').bind(I.pekan, kid, juz, u.id).first();
-      if (ada) throw new HttpError(`Juz ${juz} sudah dipilih oleh ${ada.nama}. Silakan pilih juz lain.`);
+      const ada = await db.prepare('SELECT u.nama FROM owoj_pilihan p JOIN users u ON u.id = p.user_id WHERE p.pekan = ? AND p.kelompok_id = ? AND p.juz = ? AND p.user_id != ?').bind(pekan, kid, juz, u.id).first();
+      if (ada) throw new HttpError(`Juz ${juz} ${depan ? 'pekan depan ' : ''}sudah dipilih oleh ${ada.nama}. Silakan pilih juz lain.`);
     }
     if (lama) await db.prepare('UPDATE owoj_pilihan SET juz = ?, kelompok_id = ? WHERE id = ?').bind(juz, kid, lama.id).run();
-    else await db.prepare('INSERT INTO owoj_pilihan (user_id, kelompok_id, pekan, juz) VALUES (?,?,?,?)').bind(u.id, kid, I.pekan, juz).run();
-    return json({ ok: true, saya: await pilihanAktif(db, u.id, I.pekan) });
+    else await db.prepare('INSERT INTO owoj_pilihan (user_id, kelompok_id, pekan, juz) VALUES (?,?,?,?)').bind(u.id, kid, pekan, juz).run();
+    return json({ ok: true, saya: await pilihanAktif(db, u.id, pekan) });
   },
 
-  'POST /owoj/batal': async ({ db, u }) => {
+  'POST /owoj/batal': async ({ db, u, body }) => {
     wajibPeran(u, 'siswa', 'guru', 'admin');
     const I = await infoPekan(db);
-    const lama = await pilihanAktif(db, u.id, I.pekan);
+    const lama = await pilihanAktif(db, u.id, body.untuk === 'depan' ? I.pekan_depan : I.pekan);
     if (!lama) throw new HttpError('Belum ada juz yang dipilih');
     if (lama.dibaca > 0) throw new HttpError('Sudah mulai dibaca, tidak bisa dibatalkan');
     await db.prepare('DELETE FROM owoj_pilihan WHERE id = ?').bind(lama.id).run();
@@ -891,5 +923,60 @@ Object.assign(HANDLER, {
       siswa: anggota.map((s) => ({ ...s, pilihan: byUser[s.id] || null })),
       guru: guruIkut, peta,
     });
+  },
+});
+
+// =========================================================
+//  LAPORAN BACA DARI MUSHAF CETAK (offline) + REKAP TADARUS GURU
+// =========================================================
+Object.assign(HANDLER, {
+  // body: { jenis: 'tadarus' | 'owoj', jumlah, tanggal, pernyataan: true }
+  'POST /saya/cetak': async ({ db, u, body }) => {
+    wajibPeran(u, 'siswa', 'guru', 'admin');
+    const p = { ...OWOJ_DEF, ...(await ambilPengaturan(db)) };
+    if ((p.izin_cetak ?? '1') === '0') throw new HttpError('Laporan baca mushaf cetak sedang tidak diizinkan');
+    if (body.pernyataan !== true) throw new HttpError('Centang pernyataan kejujuran terlebih dahulu');
+    const hi = hariIniWIB(), kemarin = tambahHari(hi, -1);
+    const tgl = body.tanggal || hi;
+    if (tgl !== hi && tgl !== kemarin) throw new HttpError('Laporan hanya untuk hari ini atau kemarin');
+    const jumlah = parseInt(body.jumlah);
+    if (!(jumlah >= 1 && jumlah <= 100)) throw new HttpError('Jumlah halaman 1–100 per laporan');
+    if (body.jenis === 'owoj') {
+      const I = await infoPekan(db);
+      if (tgl < I.pekan) throw new HttpError('Tanggal di luar pekan OWOJ ini');
+      const pl = await pilihanAktif(db, u.id, I.pekan);
+      if (!pl) throw new HttpError('Pilih juz OWOJ pekan ini terlebih dahulu');
+      const sisa = pl.total - pl.dibaca;
+      if (!sisa) throw new HttpError('Juz OWOJ pekan ini sudah tuntas');
+      const n = Math.min(jumlah, sisa);
+      const waktu = tgl + ' 05:00:00'; // = pukul 12.00 WIB pada tanggal tsb
+      const st = [];
+      for (let i = 0; i < n; i++) st.push(db.prepare('INSERT INTO owoj_baca (pilihan_id, halaman, waktu, sumber) VALUES (?,?,?,?)').bind(pl.id, pl.halaman_berikut + i, waktu, 'cetak'));
+      await db.batch(st);
+      let tuntas = false;
+      if (n === sisa) { await db.prepare(`UPDATE owoj_pilihan SET selesai_pada = datetime('now') WHERE id = ?`).bind(pl.id).run(); tuntas = true; }
+      return json({ ok: true, jenis: 'owoj', dicatat: n, tuntas, dari: pl.halaman_berikut, sampai: pl.halaman_berikut + n - 1 });
+    }
+    // tadarus harian: lanjut berurutan dari posisi terakhir
+    const s = await db.prepare(`SELECT ${kolomSiswa} FROM users WHERE id = ?`).bind(u.id).first();
+    const [r] = await statusBanyakSiswa(db, [s], p);
+    let hlm = r.status.halaman_berikut;
+    const dari = hlm;
+    const st = [];
+    for (let i = 0; i < jumlah; i++) {
+      st.push(db.prepare('INSERT INTO bacaan (siswa_id, halaman, tanggal, sumber, oleh) VALUES (?,?,?,?,?)').bind(u.id, hlm, tgl, 'cetak', u.id));
+      hlm = hlm >= TOTAL_HALAMAN ? 1 : hlm + 1;
+    }
+    await db.batch(st);
+    return json({ ok: true, jenis: 'tadarus', dicatat: jumlah, dari, sampai: dari + jumlah - 1 > TOTAL_HALAMAN ? (dari + jumlah - 1) - TOTAL_HALAMAN : dari + jumlah - 1 });
+  },
+
+  'GET /guru-tadarus': async ({ db, u }) => {
+    wajibPeran(u, 'admin', 'guru');
+    const p = await ambilPengaturan(db);
+    const { results } = await db.prepare(`SELECT ${kolomSiswa} FROM users WHERE peran = 'guru' AND aktif = 1 ORDER BY nama`).all();
+    for (const g of results) if (!g.tgl_mulai) g.tgl_mulai = hariIniWIB();
+    const data = await statusBanyakSiswa(db, results, p, 7);
+    return json(data.map((d) => ({ ...d.siswa, ...d.status })));
   },
 });

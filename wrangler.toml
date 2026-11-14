@@ -5,4 +5,4 @@ pages_build_output_dir = "public"
 [[d1_databases]]
 binding = "DB"
 database_name = "tadarus-db"
-database_id = "c43d70c5-6956-4f73-a266-5a2a991fa66e"
+database_id = "GANTI_DENGAN_DATABASE_ID_ANDA"

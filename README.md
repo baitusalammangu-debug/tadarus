@@ -33,6 +33,14 @@ Berjalan di **Cloudflare Pages + D1** (gratis), kode disimpan di **GitHub**.
 - Admin (Pengaturan): aktif/nonaktif, hari awal pekan (default Senin), aturan pembagian juz, poin OWOJ.
 - Bacaan OWOJ dicatat terpisah dan **tidak mengubah** target/hutang tadarus harian.
 
+**Tadarus guru** — guru juga mendapat target harian (default 2 halaman/hari, diatur admin) lengkap dengan hutang, tabungan, poin, riwayat, dan notifikasi lewat menu **Tadarus Saya**. Admin melihat rekap tadarus semua guru di Dasbor.
+
+**OWOJ ikut terhitung** — halaman OWOJ yang dibaca otomatis memenuhi target tadarus harian; kelebihannya menjadi tabungan (bisa dimatikan di Pengaturan).
+
+**OWOJ pekan depan** — jika juz pekan ini sudah penuh (atau ingin memesan lebih awal), siswa/guru bisa memilih juz untuk pekan depan lewat tab **Pekan depan**. Semua peserta bisa melihat siapa membaca juz apa beserta progresnya.
+
+**Lapor baca mushaf cetak** — untuk bacaan dari mushaf cetak (offline), siswa/guru mengisi jumlah halaman dan tanggal (hari ini/kemarin) disertai pernyataan jujur. Halaman dicatat berurutan (tadarus atau juz OWOJ) dengan tanda **"📗 Mushaf cetak"** yang terlihat oleh guru. Fitur bisa dimatikan admin.
+
 **Guru**: rekap kelompok (tuntas/belum, hutang, tabungan, poin, posisi halaman, 7 hari terakhir), unduh CSV/cetak, atur target, hari aktif, jeda minimal per halaman, hari libur, pengumuman, peringkat, detail siswa (setor bacaan manual, target khusus, titik mulai).
 
 **Admin**: dasbor, kelompok, pengguna (tambah, ubah, reset password, nonaktifkan, **impor CSV/Excel massal** + cetak kartu akun), libur global, pengaturan (nama lembaga, logo, poin).
