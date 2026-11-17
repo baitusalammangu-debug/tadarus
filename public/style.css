@@ -259,3 +259,14 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.88rem}
 .kode-mini{margin-top:8px;font-family:ui-monospace,Consolas,monospace;font-weight:700;font-size:.82rem;color:var(--hijau);background:var(--hijau-muda);display:inline-block;padding:3px 8px;border-radius:7px}
 .kode-card{text-align:center;border:2px dashed var(--emas)}
 .kode-besar{font-family:ui-monospace,Consolas,monospace;font-size:2rem;font-weight:800;letter-spacing:.08em;color:var(--hijau-tua);margin:6px 0;user-select:all;word-break:break-all}
+
+/* ---------- OWOJ: banyak juz & putaran ---------- */
+.owoj-daftar{display:grid;gap:10px;margin-top:10px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.owoj-item{border:1px solid var(--garis);border-radius:14px;padding:12px;background:#fff}
+.owoj-item.selesai{background:var(--hijau-muda);border-color:#b8dccd}
+.owoj-angka.kecil{width:46px;height:46px;font-size:.85rem}
+.owoj-khatam{margin-top:12px;background:rgba(255,255,255,.16);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column}
+.owoj-khatam span{font-size:1.3rem;font-weight:800}
+.owoj-khatam small{opacity:.9}
+.putaran-badge{position:absolute;top:6px;right:8px;font-size:.66rem;font-weight:800;background:var(--emas);color:#3b2a06;border-radius:99px;padding:1px 6px}
+.juz-tile .cek{right:auto;left:auto;top:auto;bottom:6px;right:8px}

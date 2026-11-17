@@ -24,7 +24,8 @@ Berjalan di **Cloudflare Pages + D1** (gratis), kode disimpan di **GitHub**.
 - Perubahan target menyimpan riwayat, sehingga perhitungan hari-hari lalu tetap adil.
 
 **Program OWOJ (One Week One Juz)** — menu 🗓️ OWOJ
-- Setiap pekan, siswa (dan guru) **memilih sendiri juz** yang akan dibaca dari peta 30 juz kelompoknya.
+- Setiap pekan, siswa dan guru **memilih sendiri juz** yang akan dibaca; satu orang boleh mengambil **lebih dari 1 juz** (batas diatur admin, default 5).
+- **Sistem putaran**: setelah ke-30 juz diambil, semua juz terbuka lagi untuk putaran berikutnya. Setiap putaran yang 30 juznya tuntas = **1× khatam**, sehingga dalam sepekan bisa khatam 2×, 3×, dst. (ditampilkan "Khatam 2× · pekan 16–22 Nov 2026").
 - Default: satu juz untuk satu orang, sehingga kelompok bisa **khatam 30 juz bersama** tiap pekan. Bisa diubah agar satu juz boleh dipilih beberapa orang.
 - Mode baca juz berurutan dengan tombol ✓ per halaman (tajwid, latin, terjemah, dan murottal tetap tersedia), saran halaman per hari, dan pengingat di beranda.
 - Pilihan juz bisa diganti/dibatalkan selama belum mulai dibaca. Juz yang tidak selesai sampai akhir pekan tercatat "tidak tuntas".

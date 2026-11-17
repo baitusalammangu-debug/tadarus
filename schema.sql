@@ -107,9 +107,9 @@ CREATE TABLE IF NOT EXISTS owoj_pilihan (
   kelompok_id INTEGER NOT NULL DEFAULT 0,   -- grup OWOJ = kelompok (0 = tanpa kelompok)
   pekan TEXT NOT NULL,                      -- tanggal awal pekan (YYYY-MM-DD)
   juz INTEGER NOT NULL,
+  putaran INTEGER DEFAULT 1,               -- putaran khatam ke-berapa dalam pekan tsb
   dibuat TEXT DEFAULT (datetime('now')),
-  selesai_pada TEXT,
-  UNIQUE (user_id, pekan)
+  selesai_pada TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_owoj_pk ON owoj_pilihan(pekan, kelompok_id);
 
@@ -130,4 +130,5 @@ INSERT OR IGNORE INTO pengaturan (kunci, nilai) VALUES
  ('owoj_hitung_tadarus', '1'),  -- halaman OWOJ ikut memenuhi target tadarus harian
  ('target_guru', '2'),          -- target tadarus harian guru (halaman)
  ('tadarus_guru_aktif', '1'),
- ('izin_cetak', '1');           -- boleh melapor baca dari mushaf cetak
+ ('izin_cetak', '1'),             -- boleh melapor baca dari mushaf cetak
+ ('owoj_maks_juz', '5');          -- maksimal juz per orang per pekan (0 = tanpa batas)

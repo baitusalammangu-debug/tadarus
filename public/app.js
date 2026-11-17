@@ -210,12 +210,14 @@ async function viewBerandaSiswa() {
   await muatMeta();
   const [st, ow] = await Promise.all([muatStatus(14), api('/owoj').catch(() => null)]);
   notifHarian(st);
-  const kartuOwoj = !ow || !ow.aktif ? '' : ow.saya ? `
-    <a class="card flat row spread" href="#/owoj${ow.saya.selesai_pada ? '' : '/baca'}" style="color:inherit">
-      <div style="flex:1"><b>🗓️ OWOJ · Juz ${ow.saya.juz}</b><div class="small muted">${ow.saya.selesai_pada ? 'Tuntas pekan ini ✓' : `${ow.saya.dibaca}/${ow.saya.total} halaman · ${ow.sisa_hari} hari lagi`}</div>
-      <div class="progress" style="margin-top:6px"><i style="width:${ow.saya.persen}%"></i></div></div>
-      <span class="btn kecil emas" style="margin-left:10px">${ow.saya.selesai_pada ? 'Lihat' : 'Baca'}</span></a>` : `
-    <a class="card flat row spread" href="#/owoj" style="color:inherit"><div><b>🗓️ OWOJ pekan ini</b><div class="small muted">Kamu belum memilih juz. ${30 - new Set(ow.peta.map((x) => x.juz)).size} juz masih tersedia.</div></div><span class="btn kecil">Pilih juz</span></a>`;
+  const owAktif = ow && ow.aktif ? ow.saya.filter((x) => !x.selesai_pada) : [];
+  const kartuOwoj = !ow || !ow.aktif ? '' : ow.saya.length ? `
+    <a class="card flat row spread" href="#/owoj${owAktif.length ? '/baca/' + owAktif[0].id : ''}" style="color:inherit">
+      <div style="flex:1"><b>🗓️ OWOJ · ${ow.saya.map((x) => 'Juz ' + x.juz + (x.selesai_pada ? ' ✓' : '')).join(', ')}</b>
+      <div class="small muted">${owAktif.length ? `Juz ${owAktif[0].juz}: ${owAktif[0].dibaca}/${owAktif[0].total} halaman · ${ow.sisa_hari} hari lagi` : 'Semua juz pilihanmu tuntas ✓ · boleh ambil juz lagi'}${ow.stat.khatam ? ` · 🏆 khatam bersama ${ow.stat.khatam}×` : ''}</div>
+      ${owAktif.length ? `<div class="progress" style="margin-top:6px"><i style="width:${owAktif[0].persen}%"></i></div>` : ''}</div>
+      <span class="btn kecil emas" style="margin-left:10px">${owAktif.length ? 'Baca' : 'Lihat'}</span></a>` : `
+    <a class="card flat row spread" href="#/owoj" style="color:inherit"><div><b>🗓️ OWOJ pekan ini</b><div class="small muted">Kamu belum memilih juz. ${30 - ow.stat.diambil_putaran} juz tersedia di putaran ${ow.stat.putaran}.</div></div><span class="btn kecil">Pilih juz</span></a>`;
   const u = S.me.user;
   const kewajibanHariIni = st.dibaca_hari_ini + st.sisa_hari_ini;
   const pct = st.selesai_hari_ini ? 100 : Math.round((st.dibaca_hari_ini / Math.max(1, kewajibanHariIni)) * 100);
@@ -1201,7 +1203,8 @@ async function viewPengaturan() {
       <div class="field"><label>Status program</label><select class="input" name="owoj_aktif"><option value="1" ${p.owoj_aktif !== '0' ? 'selected' : ''}>Aktif</option><option value="0" ${p.owoj_aktif === '0' ? 'selected' : ''}>Nonaktif</option></select></div>
       <div class="field"><label>Pekan dimulai hari</label><select class="input" name="owoj_hari_mulai">${HARI.map((h, i) => `<option value="${i}" ${String(i) === String(p.owoj_hari_mulai ?? '1') ? 'selected' : ''}>${h}</option>`).join('')}</select></div>
       <div class="field"><label>Cakupan grup OWOJ</label><select class="input" name="owoj_cakupan"><option value="sekolah" ${p.owoj_cakupan !== 'kelompok' ? 'selected' : ''}>Satu sekolah/lembaga — semua murid & guru berbagi satu peta 30 juz</option><option value="kelompok" ${p.owoj_cakupan === 'kelompok' ? 'selected' : ''}>Per kelompok — tiap kelas punya peta 30 juz sendiri</option></select></div>
-      <div class="field"><label>Pembagian juz</label><select class="input" name="owoj_juz_unik"><option value="1" ${p.owoj_juz_unik !== '0' ? 'selected' : ''}>Satu juz untuk satu orang (target khatam bersama)</option><option value="0" ${p.owoj_juz_unik === '0' ? 'selected' : ''}>Satu juz boleh dipilih beberapa orang</option></select></div>
+      <div class="field"><label>Maksimal juz per orang per pekan</label><input class="input" type="number" min="0" max="30" name="owoj_maks_juz" value="${esc(p.owoj_maks_juz ?? 5)}"><div class="tiny muted">0 = tanpa batas</div></div>
+      <div class="field"><label>Pembagian juz</label><select class="input" name="owoj_juz_unik"><option value="1" ${p.owoj_juz_unik !== '0' ? 'selected' : ''}>Sistem putaran — juz bisa diambil lagi setelah ke-30 juz diambil (khatam bersama)</option><option value="0" ${p.owoj_juz_unik === '0' ? 'selected' : ''}>Bebas — juz mana pun boleh dipilih bersamaan</option></select></div>
       <div class="field"><label>Poin per juz OWOJ tuntas</label><input class="input" type="number" min="0" name="owoj_poin" value="${esc(p.owoj_poin ?? 50)}"></div>
       <div class="field"><label>Halaman OWOJ ikut memenuhi target tadarus harian</label><select class="input" name="owoj_hitung_tadarus"><option value="1" ${p.owoj_hitung_tadarus !== '0' ? 'selected' : ''}>Ya (otomatis tercatat, kelebihan jadi tabungan)</option><option value="0" ${p.owoj_hitung_tadarus === '0' ? 'selected' : ''}>Tidak (terpisah)</option></select></div>
     </div>
@@ -1240,12 +1243,13 @@ function unduhCSV(nama, rows) {
 
 
 // =========================================================
-//  OWOJ — One Week One Juz
+//  OWOJ — One Week One Juz (banyak juz per orang + putaran khatam)
 // =========================================================
 const rentangPekan = (d) => `${tglIndo(d.pekan, false)} – ${tglIndo(d.akhir, false)}`;
 const statusPilihan = (x) => !x ? '<span class="badge merah">Belum memilih</span>'
   : x.selesai_pada ? '<span class="badge hijau">Tuntas ✓</span>'
   : x.dibaca ? `<span class="badge emas">${x.dibaca}/${x.total} hlm</span>` : '<span class="badge biru">Belum mulai</span>';
+const teksKhatam = (n) => n > 0 ? `Khatam ${n}×` : 'Belum khatam';
 
 async function viewOwoj() {
   memuat();
@@ -1258,92 +1262,102 @@ async function viewOwoj() {
   if (pekanPilih) q.set('pekan', pekanPilih);
   const d = await api('/owoj?' + q);
   const modeDepan = sessionStorage.getItem('owoj_mode') === 'depan';
-  if (modeDepan) { d.peta = d.peta_depan; d.pekan = d.pekan_depan; d.akhir = d.akhir_depan; }
+  if (modeDepan) { d.peta = d.peta_depan; d.stat = d.stat_depan; d.pekan = d.pekan_depan; d.akhir = d.akhir_depan; }
   const pekanIni = !modeDepan && d.pekan === d.pekan_ini;
+  const bisaPilih = d.aktif && (pekanIni || modeDepan);
   const rekap = guru && d.kelompok_id ? await api(`/owoj/rekap/${d.kelompok_id}?pekan=${d.pekan}`).catch(() => null) : null;
-  const saya = modeDepan ? d.saya_depan : d.saya;
-  const terambil = new Set(d.peta.map((x) => x.juz));
-  const tuntasJuz = new Set(d.peta.filter((x) => x.selesai_pada).map((x) => x.juz));
-  const bolehPilih = d.aktif && (modeDepan || (pekanIni && (!saya || !saya.dibaca)));
-  const penuhPekanIni = d.juz_unik && new Set((d.peta || []).map((x) => x.juz)).size >= 30;
-  const perHari = saya && saya.halaman_berikut ? Math.ceil((saya.total - saya.dibaca) / Math.max(1, d.sisa_hari)) : 0;
+  const saya = (modeDepan ? d.saya_depan : pekanIni ? d.saya : []) || [];
+  const st = d.stat;
+  const kamu = guru ? 'Anda' : 'kamu';
+  const sisaKuota = d.maks_juz > 0 ? Math.max(0, d.maks_juz - saya.length) : Infinity;
 
-  const tombolCetak = d.izin_cetak && pekanIni && saya && !saya.selesai_pada ? `<button class="btn putih" onclick="laporCetak('owoj')">📗 Lapor baca mushaf cetak</button>` : '';
-  const kartuSaya = modeDepan ? (saya ? `
-    <div class="card owoj-saya"><div class="small muted">Pesanan juz pekan depan (${tglIndo(d.pekan, false)} – ${tglIndo(d.akhir, false)})</div>
-      <h2 style="margin:2px 0">Juz ${saya.juz}</h2><div class="small muted">Halaman ${saya.awal}–${saya.akhir} · ${saya.total} halaman. Bisa mulai dibaca saat pekan depan tiba.</div>
-      <div class="row" style="margin-top:10px"><button class="btn putih" id="owoj-batal">Batalkan pesanan</button><span class="small muted">Ketuk juz lain untuk mengganti.</span></div></div>`
-    : `<div class="alert info">📅 Pilih juz yang akan ${guru ? 'Anda' : 'kamu'} baca <b>pekan depan</b> (${tglIndo(d.pekan, false)} – ${tglIndo(d.akhir, false)}).</div>`)
-    : !pekanIni ? '' : saya ? `
+  // jumlah pengambilan & tuntas per juz
+  const ambil = Array(31).fill(0), tuntas = Array(31).fill(0);
+  for (const x of d.peta) { ambil[x.juz]++; if (x.selesai_pada) tuntas[x.juz]++; }
+  const minAmbil = Math.min(...ambil.slice(1));
+  const tersedia = (j) => !d.juz_unik || ambil[j] === minAmbil;
+
+  const kartuJuzSaya = (pl) => {
+    const perHari = pl.halaman_berikut ? Math.ceil((pl.total - pl.dibaca) / Math.max(1, d.sisa_hari)) : 0;
+    return `<div class="owoj-item ${pl.selesai_pada ? 'selesai' : ''}">
+      <div class="row spread"><div><b>Juz ${pl.juz}</b> <span class="badge ${pl.putaran > 1 ? 'emas' : 'hijau'}">Putaran ${pl.putaran}</span>
+        <div class="tiny muted">Hlm ${pl.awal}–${pl.akhir} · ${pl.total} halaman · ${esc(surahDiHalaman(pl.awal)[1])}</div></div>
+        <div class="owoj-angka kecil">${pl.selesai_pada ? '✓' : pl.persen + '%'}</div></div>
+      <div class="progress" style="margin:8px 0 4px"><i style="width:${pl.persen}%"></i></div>
+      <div class="small">${pl.selesai_pada ? `🎉 Tuntas · +${d.poin} poin` : modeDepan ? 'Bisa dibaca saat pekan depan tiba.' : `${pl.dibaca}/${pl.total} hlm · saran <b>${perHari} hlm/hari</b>`}</div>
+      <div class="row" style="margin-top:8px;gap:6px">
+        ${!modeDepan && pekanIni && !pl.selesai_pada ? `<a class="btn kecil" href="#/owoj/baca/${pl.id}">📖 ${pl.dibaca ? 'Lanjut baca' : 'Mulai baca'}</a>` : ''}
+        ${!modeDepan && pekanIni && !pl.selesai_pada && d.izin_cetak ? `<button class="btn putih kecil" onclick="laporCetak('owoj', ${pl.id})">📗 Lapor mushaf cetak</button>` : ''}
+        ${!pl.dibaca ? `<button class="btn putih kecil" data-batal="${pl.id}">Batalkan</button>` : ''}
+      </div></div>`;
+  };
+
+  const kartuSaya = !bisaPilih ? '' : `
     <div class="card owoj-saya">
-      <div class="row spread"><div><div class="small muted">Juz saya pekan ini</div><h2 style="margin:2px 0">Juz ${saya.juz}</h2>
-        <div class="small muted">Halaman ${saya.awal}–${saya.akhir} · ${saya.total} halaman · mulai ${esc(surahDiHalaman(saya.awal)[1])}</div></div>
-        <div class="owoj-angka">${saya.selesai_pada ? '✓' : saya.persen + '%'}</div></div>
-      <div class="progress" style="margin:12px 0 6px"><i style="width:${saya.persen}%"></i></div>
-      <div class="small">${saya.selesai_pada ? `🎉 Alhamdulillah, Juz ${saya.juz} tuntas! +${d.poin} poin.` : `Sudah ${saya.dibaca} dari ${saya.total} halaman · sisa ${d.sisa_hari} hari · saran <b>${perHari} halaman/hari</b>`}</div>
-      <div class="row" style="margin-top:12px">
-        ${saya.selesai_pada ? '' : `<a class="btn" href="#/owoj/baca">📖 ${saya.dibaca ? 'Lanjut baca' : 'Mulai baca'} Juz ${saya.juz}</a>`}
-        ${!saya.dibaca ? '<button class="btn putih" id="owoj-batal">Batalkan pilihan</button>' : ''}
-        ${tombolCetak}
-      </div>
-    </div>` : penuhPekanIni ? `
-    <div class="alert info" style="display:block">📅 Semua 30 juz pekan ini sudah dipilih peserta lain. ${guru ? 'Anda' : 'Kamu'} bisa memesan juz untuk <b>pekan depan</b>.
-      <div style="margin-top:8px"><button class="btn kecil" id="ke-depan">Pilih juz pekan depan</button></div></div>` : `
-    <div class="alert peringatan">📌 ${guru ? 'Anda belum' : 'Kamu belum'} memilih juz untuk pekan ini. Ketuk salah satu juz yang tersedia di bawah.</div>`;
+      <div class="row spread"><h3 style="margin:0">Juz ${guru ? 'saya' : 'saya'} ${modeDepan ? 'pekan depan' : 'pekan ini'} (${saya.length})</h3>
+        <span class="tiny muted">${d.maks_juz > 0 ? `maks. ${d.maks_juz} juz/orang` : 'tanpa batas juz'}</span></div>
+      ${saya.length ? `<div class="owoj-daftar">${saya.map(kartuJuzSaya).join('')}</div>` : `<p class="small muted" style="margin:8px 0 0">${guru ? 'Anda' : 'Kamu'} belum memilih juz. Ketuk juz yang tersedia pada peta di bawah.</p>`}
+      ${saya.length && sisaKuota > 0 ? `<p class="tiny muted" style="margin:8px 0 0">➕ ${guru ? 'Anda' : 'Kamu'} masih bisa menambah ${sisaKuota === Infinity ? '' : sisaKuota + ' '}juz lagi — ketuk juz di peta.</p>` : ''}
+    </div>`;
 
   const peserta = (j) => d.peta.filter((x) => x.juz === j);
   const grid = Array.from({ length: 30 }, (_, i) => {
     const j = i + 1;
-    const ps = peserta(j);
-    const milikSaya = saya && saya.juz === j;
-    const penuh = d.juz_unik && ps.length && !milikSaya;
-    const tuntas = ps.some((x) => x.selesai_pada);
-    const progres = ps.length ? Math.max(...ps.map((x) => Math.round((x.dibaca / x.total) * 100))) : 0;
-    const cls = milikSaya ? 'saya' : tuntas ? 'tuntas' : ps.length ? 'diambil' : 'kosong';
-    return `<button class="juz-tile ${cls}" data-juz="${j}" ${(!bolehPilih || penuh || milikSaya) ? 'data-kunci="1"' : ''}>
-      <b>Juz ${j}</b>
-      <span class="nm">${ps.length ? ps.map((x) => esc(x.nama.split(' ')[0])).join(', ') : ((pekanIni || modeDepan) && d.aktif ? 'Tersedia' : '—')}</span>
+    const ps = peserta(j).filter((x) => x.putaran >= st.putaran || (!d.juz_unik && !x.selesai_pada)); // hanya putaran berjalan
+    const milikSaya = saya.some((x) => x.juz === j && !x.selesai_pada);
+    const bisa = bisaPilih && tersedia(j) && sisaKuota > 0 && !milikSaya;
+    const akhir = ps[ps.length - 1];
+    const progres = akhir ? Math.round((akhir.dibaca / akhir.total) * 100) : 0;
+    const selesai = ps.some((x) => x.selesai_pada);
+    const cls = milikSaya ? 'saya' : selesai ? 'tuntas' : ps.length ? 'diambil' : 'kosong';
+    return `<button class="juz-tile ${cls}" data-juz="${j}" ${bisa ? '' : 'data-kunci="1"'}>
+      <b>Juz ${j}</b>${ambil[j] > 1 ? `<span class="putaran-badge" title="diambil ${ambil[j]}× pekan ini">${ambil[j]}×</span>` : ''}
+      <span class="nm">${ps.length ? esc(ps.map((x) => x.nama.split(' ')[0]).slice(-2).join(', ')) : (bisaPilih ? 'Tersedia' : '—')}</span>
       ${ps.length ? `<span class="bar-mini"><i style="width:${progres}%"></i></span>` : ''}
-      ${tuntas ? '<span class="cek">✓</span>' : ''}
+      ${selesai ? '<span class="cek">✓</span>' : ''}
     </button>`;
   }).join('');
 
   const tabelGuru = rekap ? `
     <div class="card"><div class="row spread"><h3 style="margin:0">Peserta ${esc(d.kelompok?.nama || '')}</h3><button class="btn sec kecil" id="owoj-csv">⬇ CSV</button></div>
-    <div class="small muted" style="margin:4px 0 10px">${rekap.siswa.filter((s) => s.pilihan).length}/${rekap.siswa.length} siswa sudah memilih · ${rekap.siswa.filter((s) => s.pilihan?.selesai_pada).length} tuntas</div>
-    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nama</th><th>Juz</th><th>Progres</th><th>Status</th></tr></thead><tbody>
-    ${rekap.siswa.map((s) => `<tr><td><b>${esc(s.nama)}</b></td><td>${s.pilihan ? 'Juz ' + s.pilihan.juz : '-'}</td>
-      <td style="min-width:110px">${s.pilihan ? `<div class="bar-mini"><i style="width:${Math.round((s.pilihan.dibaca / s.pilihan.total) * 100)}%"></i></div>` : ''}</td><td>${statusPilihan(s.pilihan)}</td></tr>`).join('')}
-    ${rekap.guru.map((g) => `<tr><td><b>${esc(g.nama)}</b> <span class="badge biru">${g.peran}</span></td><td>Juz ${g.juz}</td><td><div class="bar-mini"><i style="width:${Math.round((g.dibaca / g.total) * 100)}%"></i></div></td><td>${statusPilihan(g)}</td></tr>`).join('')}
+    <div class="small muted" style="margin:4px 0 10px">${rekap.siswa.filter((s) => s.pilihan.length).length}/${rekap.siswa.length} siswa ikut · ${rekap.siswa.reduce((n, s) => n + s.pilihan.filter((x) => x.selesai_pada).length, 0)} juz tuntas</div>
+    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nama</th><th>Juz dipilih</th><th>Tuntas</th></tr></thead><tbody>
+    ${rekap.siswa.map((s) => `<tr><td><b>${esc(s.nama)}</b></td><td>${s.pilihan.length ? s.pilihan.map((x) => `<span class="badge ${x.selesai_pada ? 'hijau' : x.dibaca ? 'emas' : 'biru'}" title="putaran ${x.putaran}: ${x.dibaca}/${x.total} hlm">Juz ${x.juz}${x.selesai_pada ? ' ✓' : ` · ${x.dibaca}/${x.total}`}</span>`).join(' ') : '<span class="badge merah">Belum memilih</span>'}</td>
+      <td>${s.pilihan.filter((x) => x.selesai_pada).length}</td></tr>`).join('')}
+    ${rekap.guru.map((g) => `<tr><td><b>${esc(g.nama)}</b> <span class="badge biru">guru</span></td><td><span class="badge ${g.selesai_pada ? 'hijau' : 'emas'}">Juz ${g.juz}${g.selesai_pada ? ' ✓' : ` · ${g.dibaca}/${g.total}`}</span></td><td>${g.selesai_pada ? 1 : 0}</td></tr>`).join('')}
     </tbody></table></div></div>` : '';
 
+  const daftarPeserta = !rekap && d.peta.length ? `<div class="card"><h3>Peserta ${modeDepan ? 'pekan depan' : 'pekan ini'} (${new Set(d.peta.map((x) => x.user_id)).size} orang · ${d.peta.length} juz)</h3>
+    ${d.peta.map((x) => `<div class="row spread" style="padding:8px 0;border-bottom:1px solid #f0ede4"><div><b>${esc(x.nama)}</b> ${x.peran !== 'siswa' ? '<span class="badge biru">guru</span>' : ''}
+      <div class="tiny muted">Juz ${x.juz} · putaran ${x.putaran}${d.cakupan === 'sekolah' && x.kelompok_nama ? ' · ' + esc(x.kelompok_nama) : ''}</div></div>
+      <div style="width:120px;text-align:right">${statusPilihan(x)}<div class="bar-mini"><i style="width:${Math.round((x.dibaca / x.total) * 100)}%"></i></div></div></div>`).join('')}</div>` : '';
+
   shell(`
-    <div class="row spread"><div><h1 style="margin:0">OWOJ</h1><div class="small muted">One Week One Juz · satu pekan satu juz</div></div>
+    <div class="row spread"><div><h1 style="margin:0">OWOJ</h1><div class="small muted">One Week One Juz · khatam bersama setiap pekan</div></div>
       ${guru && d.kelompok_saya.length ? `<select class="input" id="owoj-k" style="width:auto">${d.kelompok_saya.map((k) => `<option value="${k.id}" ${k.id === d.kelompok_id ? 'selected' : ''}>${esc(k.nama)}</option>`).join('')}</select>` : ''}</div>
     ${!d.aktif ? '<div class="alert info" style="margin-top:12px">Program OWOJ sedang tidak aktif.</div>' : ''}
-    <div class="tabs" style="margin:14px 0 0"><button id="tab-ini" class="${modeDepan ? '' : 'aktif'}">Pekan ini</button><button id="tab-depan" class="${modeDepan ? 'aktif' : ''}">Pekan depan${d.saya_depan ? ' ✓' : ''}</button></div>
+    <div class="tabs" style="margin:14px 0 0"><button id="tab-ini" class="${modeDepan ? '' : 'aktif'}">Pekan ini</button><button id="tab-depan" class="${modeDepan ? 'aktif' : ''}">Pekan depan${d.saya_depan.length ? ` (${d.saya_depan.length})` : ''}</button></div>
     <div class="owoj-hero">
       <div class="row spread"><div><div class="small" style="opacity:.85">${modeDepan ? 'Pekan depan' : pekanIni ? 'Pekan ini' : 'Pekan'}</div><b style="font-size:1.1rem">${rentangPekan(d)}</b></div>
         <div style="text-align:right">${pekanIni ? `<b style="font-size:1.6rem">${d.sisa_hari}</b><div class="tiny">hari lagi</div>` : ''}</div></div>
-      <div class="row spread" style="margin-top:14px"><span class="small">Khatam bersama ${d.cakupan === 'sekolah' ? 'semua peserta' : esc(d.kelompok?.nama || '')}</span><b>${tuntasJuz.size}/30 juz tuntas</b></div>
-      <div class="progress owoj-prog"><i style="width:${(tuntasJuz.size / 30) * 100}%"></i><s style="width:${(terambil.size / 30) * 100}%"></s></div>
-      <div class="tiny" style="opacity:.85;margin-top:4px">${terambil.size} juz sudah dipilih · ${30 - terambil.size} juz belum ada yang membaca</div>
-      ${tuntasJuz.size === 30 ? '<div class="alert sukses" style="margin:10px 0 0">🎉 Masya Allah! Kelompok ini khatam 30 juz bersama pekan ini.</div>' : ''}
+      <div class="owoj-khatam"><span>🏆 ${teksKhatam(st.khatam)}</span><small>${d.cakupan === 'sekolah' ? 'semua peserta' : esc(d.kelompok?.nama || '')} · pekan ${tglIndo(d.pekan, false)} – ${tglIndo(d.akhir, false)}</small></div>
+      <div class="row spread" style="margin-top:10px"><span class="small">Menuju khatam ke-${st.khatam + 1} (putaran ${st.khatam + 1})</span><b>${st.tuntas_putaran}/30 juz tuntas</b></div>
+      <div class="progress owoj-prog"><i style="width:${(st.tuntas_putaran / 30) * 100}%"></i></div>
+      <div class="tiny" style="opacity:.9;margin-top:4px">Pemilihan juz sedang di <b>putaran ${st.putaran}</b>: ${st.diambil_putaran} juz sudah diambil, ${30 - st.diambil_putaran} juz tersedia${d.juz_unik ? '' : ' (juz boleh dipilih bersamaan)'}.</div>
       <div class="row ${modeDepan ? 'hidden' : ''}" style="margin-top:10px;gap:6px"><button class="btn putih kecil" id="pk-prev">‹ Pekan lalu</button>${!pekanIni ? '<button class="btn putih kecil" id="pk-now">Pekan ini</button>' : ''}${!pekanIni ? '<button class="btn putih kecil" id="pk-next">Pekan berikutnya ›</button>' : ''}</div>
     </div>
     ${kartuSaya}
     <div class="card"><div class="row spread"><h3 style="margin:0">Peta Juz</h3>
-      <span class="tiny muted">${d.cakupan === 'sekolah' ? 'Satu peta untuk semua murid & guru' : 'Peta per kelompok'} · ${d.juz_unik ? 'satu juz untuk satu orang' : 'satu juz boleh beberapa orang'}</span></div>
-      <div class="legend" style="margin:6px 0 10px"><span><i style="background:#fff;border:1px solid var(--garis)"></i>Tersedia</span><span><i style="background:var(--kuning-muda)"></i>Sedang dibaca</span><span><i style="background:var(--hijau-muda)"></i>Tuntas</span><span><i style="background:var(--hijau)"></i>Juz saya</span></div>
-      <div class="juz-grid">${grid}</div></div>
-    ${tabelGuru || (d.peta.length ? `<div class="card"><h3>Peserta ${modeDepan ? 'pekan depan' : 'pekan ini'} (${d.peta.length})</h3>
-      ${d.peta.map((x) => `<div class="row spread" style="padding:8px 0;border-bottom:1px solid #f0ede4"><div><b>${esc(x.nama)}</b> ${x.peran !== 'siswa' ? '<span class="badge biru">guru</span>' : ''}<div class="tiny muted">Juz ${x.juz}${d.cakupan === 'sekolah' && x.kelompok_nama ? ' · ' + esc(x.kelompok_nama) : ''}</div></div>
-      <div style="width:120px;text-align:right">${statusPilihan(x)}<div class="bar-mini"><i style="width:${Math.round((x.dibaca / x.total) * 100)}%"></i></div></div></div>`).join('')}</div>` : '')}
-    ${d.riwayat.length ? `<div class="card"><h3>Riwayat OWOJ ${guru ? 'saya' : ''}</h3><div class="tbl-wrap"><table class="tbl"><tbody>
-      ${d.riwayat.map((r) => `<tr><td>${tglIndo(r.pekan, false)}</td><td>Juz ${r.juz}</td><td>${r.selesai_pada ? '<span class="badge hijau">Tuntas</span>' : r.pekan === d.pekan_ini ? `<span class="badge emas">${r.dibaca} hlm</span>` : `<span class="badge merah">Tidak tuntas (${r.dibaca} hlm)</span>`}</td></tr>`).join('')}
+      <span class="tiny muted">${d.cakupan === 'sekolah' ? 'Satu peta untuk semua murid & guru' : 'Peta per kelompok'}</span></div>
+      <div class="legend" style="margin:6px 0 10px"><span><i style="background:#fff;border:1px solid var(--garis)"></i>Tersedia (putaran ${st.putaran})</span><span><i style="background:var(--kuning-muda)"></i>Sudah diambil</span><span><i style="background:var(--hijau-muda)"></i>Tuntas</span><span><i style="background:var(--hijau)"></i>Juz saya</span><span><b>2×</b> = diambil 2 kali</span></div>
+      <div class="juz-grid">${grid}</div>
+      <p class="tiny muted" style="margin-bottom:0">Sistem putaran: setelah ke-30 juz diambil, semua juz terbuka lagi untuk putaran berikutnya. Setiap putaran yang 30 juznya tuntas = 1× khatam.</p></div>
+    ${tabelGuru}${daftarPeserta}
+    ${d.riwayat.length ? `<div class="card"><h3>Riwayat OWOJ ${guru ? 'saya' : 'saya'}</h3><div class="tbl-wrap"><table class="tbl"><tbody>
+      ${d.riwayat.map((r) => `<tr><td>${tglIndo(r.pekan, false)}</td><td>Juz ${r.juz} <span class="tiny muted">putaran ${r.putaran || 1}</span></td><td>${r.selesai_pada ? '<span class="badge hijau">Tuntas</span>' : r.pekan >= d.pekan_ini ? `<span class="badge emas">${r.dibaca} hlm</span>` : `<span class="badge merah">Tidak tuntas (${r.dibaca} hlm)</span>`}</td></tr>`).join('')}
       </tbody></table></div></div>` : ''}
-    ${d.ringkas.length ? `<div class="card"><h3>Rekap pekan-pekan kelompok</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Pekan</th><th>Peserta</th><th>Juz tuntas</th></tr></thead><tbody>
-      ${d.ringkas.map((r) => `<tr><td>${tglIndo(r.pekan, false)}</td><td>${r.peserta}</td><td><b>${r.juz_tuntas}/30</b> ${r.juz_tuntas === 30 ? '🎉' : ''}</td></tr>`).join('')}
+    ${d.ringkas.length ? `<div class="card"><h3>Rekap khatam per pekan</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Pekan</th><th>Peserta</th><th>Juz tuntas</th><th>Khatam</th></tr></thead><tbody>
+      ${d.ringkas.map((r) => `<tr><td>${tglIndo(r.pekan, false)} – ${tglIndo(tambahTgl(r.pekan, 6), false)}</td><td>${r.peserta} orang</td><td>${r.tuntas} juz</td><td><b>${r.khatam ? `${r.khatam}× 🎉` : '-'}</b></td></tr>`).join('')}
       </tbody></table></div></div>` : ''}
     <p class="tiny muted">Setiap juz OWOJ yang tuntas dalam pekannya mendapat ${d.poin} poin.</p>`);
 
@@ -1351,42 +1365,46 @@ async function viewOwoj() {
     const j = +b.dataset.juz;
     if (b.dataset.kunci) {
       const ps = peserta(j);
-      if (ps.length) toast(ps.map((x) => `${x.nama}: ${x.selesai_pada ? 'tuntas' : x.dibaca + '/' + x.total + ' hlm'}`).join(' · '));
-      else if (!pekanIni && !modeDepan) toast('Hanya bisa memilih juz untuk pekan ini atau pekan depan');
-      else if (saya && saya.dibaca) toast('Kamu sudah mulai membaca juz pilihanmu pekan ini');
-      return;
+      if (saya.some((x) => x.juz === j && !x.selesai_pada)) return toast(`Juz ${j} sudah ada di daftar ${kamu}`);
+      if (!bisaPilih) return toast('Hanya bisa memilih juz untuk pekan ini atau pekan depan');
+      if (sisaKuota <= 0) return toast(`Batas ${d.maks_juz} juz per pekan sudah tercapai`, true);
+      return toast((ps.length ? ps.map((x) => `${x.nama}: ${x.selesai_pada ? 'tuntas' : x.dibaca + '/' + x.total + ' hlm'}`).join(' · ') + '. ' : '') + `Juz ${j} baru bisa diambil lagi pada putaran berikutnya.`);
     }
     const r = halJuzUI(j);
-    if (!confirm(`Pilih Juz ${j} (hlm ${r[1]}–${r[2]}, ${r[2] - r[1] + 1} halaman) untuk ${modeDepan ? 'pekan depan' : 'pekan ini'}?`)) return;
-    await coba(() => api('/owoj/pilih', { method: 'POST', body: { juz: j, kelompok_id: d.kelompok_id, untuk: modeDepan ? 'depan' : 'ini' } }), modeDepan ? `Juz ${j} dipesan untuk pekan depan.` : `Juz ${j} dipilih. Selamat membaca!`);
+    if (!confirm(`Ambil Juz ${j} (hlm ${r[1]}–${r[2]}, ${r[2] - r[1] + 1} halaman) untuk ${modeDepan ? 'pekan depan' : 'pekan ini'}${ambil[j] ? ` — putaran ke-${ambil[j] + 1}` : ''}?`)) return;
+    await coba(() => api('/owoj/pilih', { method: 'POST', body: { juz: j, kelompok_id: d.kelompok_id, untuk: modeDepan ? 'depan' : 'ini' } }), modeDepan ? `Juz ${j} dipesan untuk pekan depan.` : `Juz ${j} ditambahkan. Selamat membaca!`);
     viewOwoj();
   }));
-  const bt = $('#owoj-batal'); if (bt) bt.onclick = async () => { await coba(() => api('/owoj/batal', { method: 'POST', body: { untuk: modeDepan ? 'depan' : 'ini' } }), 'Pilihan dibatalkan'); viewOwoj(); };
+  $$('[data-batal]').forEach((b) => (b.onclick = async () => {
+    if (!confirm('Batalkan pilihan juz ini?')) return;
+    await coba(() => api('/owoj/batal', { method: 'POST', body: { id: +b.dataset.batal } }), 'Pilihan dibatalkan'); viewOwoj();
+  }));
   $('#tab-ini').onclick = () => { sessionStorage.removeItem('owoj_mode'); viewOwoj(); };
   $('#tab-depan').onclick = () => { sessionStorage.setItem('owoj_mode', 'depan'); sessionStorage.removeItem('owoj_pekan'); viewOwoj(); };
-  const kd = $('#ke-depan'); if (kd) kd.onclick = () => $('#tab-depan').click();
   const sk = $('#owoj-k'); if (sk) sk.onchange = () => { sessionStorage.setItem('owoj_k', sk.value); viewOwoj(); };
-  const geser = (n) => { const t = new Date(d.pekan + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); sessionStorage.setItem('owoj_pekan', t.toISOString().slice(0, 10)); viewOwoj(); };
+  const geser = (n) => { sessionStorage.setItem('owoj_pekan', tambahTgl(d.pekan, n)); viewOwoj(); };
   $('#pk-prev').onclick = () => geser(-7);
   const pn = $('#pk-next'); if (pn) pn.onclick = () => { if (d.akhir >= d.pekan_ini) { sessionStorage.removeItem('owoj_pekan'); viewOwoj(); } else geser(7); };
   const pw = $('#pk-now'); if (pw) pw.onclick = () => { sessionStorage.removeItem('owoj_pekan'); viewOwoj(); };
-  const cv = $('#owoj-csv'); if (cv) cv.onclick = () => unduhCSV(`owoj-${d.kelompok?.nama || ''}-${d.pekan}.csv`, [['Nama', 'NIS', 'Juz', 'Halaman dibaca', 'Total halaman', 'Status'],
-    ...rekap.siswa.map((s) => [s.nama, s.nis || '', s.pilihan ? s.pilihan.juz : '', s.pilihan ? s.pilihan.dibaca : '', s.pilihan ? s.pilihan.total : '', !s.pilihan ? 'Belum memilih' : s.pilihan.selesai_pada ? 'Tuntas' : 'Belum tuntas'])]);
+  const cv = $('#owoj-csv'); if (cv) cv.onclick = () => unduhCSV(`owoj-${d.kelompok?.nama || ''}-${d.pekan}.csv`, [['Nama', 'NIS', 'Juz', 'Putaran', 'Halaman dibaca', 'Total halaman', 'Status'],
+    ...rekap.siswa.flatMap((s) => s.pilihan.length ? s.pilihan.map((x) => [s.nama, s.nis || '', x.juz, x.putaran, x.dibaca, x.total, x.selesai_pada ? 'Tuntas' : 'Belum tuntas']) : [[s.nama, s.nis || '', '', '', '', '', 'Belum memilih']])]);
 }
 const halJuzUI = (j) => S.meta.juz[j - 1];
+const tambahTgl = (t, n) => { const x = new Date(t + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 
 let timerOwoj = null;
-async function viewOwojBaca() {
+async function viewOwojBaca(id) {
   memuat();
   await muatMeta();
   const d = await api('/owoj');
-  if (!d.saya) { location.hash = '#/owoj'; return; }
-  await renderOwojBaca(d.saya, d.min_detik, d.sisa_hari);
+  const pl = id ? d.saya.find((x) => x.id === id) : d.saya.find((x) => x.halaman_berikut);
+  if (!pl) { location.hash = '#/owoj'; return; }
+  await renderOwojBaca(pl, d.min_detik, d.sisa_hari);
 }
 async function renderOwojBaca(pl, minDetik, sisaHari) {
   clearInterval(timerOwoj);
   if (!pl.halaman_berikut) {
-    shell(`<div class="card selebrasi"><div class="emo">🎉</div><h2>Juz ${pl.juz} tuntas!</h2><p>Alhamdulillah, bacaan OWOJ pekan ini selesai.</p><a class="btn" href="#/owoj">Lihat peta juz kelompok</a></div>`);
+    shell(`<div class="card selebrasi"><div class="emo">🎉</div><h2>Juz ${pl.juz} tuntas!</h2><p>Alhamdulillah, bacaan OWOJ juz ini selesai.</p><a class="btn" href="#/owoj">Lihat peta juz</a></div>`);
     return;
   }
   const n = pl.halaman_berikut;
@@ -1394,7 +1412,7 @@ async function renderOwojBaca(pl, minDetik, sisaHari) {
   muatHalaman(Math.min(TOTAL, n + 1)).catch(() => {});
   const main = shell(`
     ${barPembaca(n)}
-    <div class="owoj-pita">OWOJ · Juz ${pl.juz} · halaman ke-${pl.dibaca + 1} dari ${pl.total}</div>
+    <div class="owoj-pita">OWOJ · Juz ${pl.juz} (putaran ${pl.putaran}) · halaman ke-${pl.dibaca + 1} dari ${pl.total}</div>
     <article class="mushaf"><div class="isi-hlm"></div><div class="hlm-no">— ${angkaArab(n)} —</div><div class="legenda-wrap"></div></article>
     <div class="aksi-baca"><div class="panel">
       <div class="ket"><b>OWOJ Juz ${pl.juz}: ${pl.dibaca}/${pl.total} hlm</b>
@@ -1417,8 +1435,8 @@ async function renderOwojBaca(pl, minDetik, sisaHari) {
   btn.onclick = async () => {
     btn.disabled = true; btn.textContent = 'Menyimpan…';
     try {
-      const r = await api('/owoj/baca', { method: 'POST', body: { halaman: n } });
-      if (r.tuntas) modal(`<div class="selebrasi"><div class="emo">🌟📖🌟</div><h2>Juz ${pl.juz} tuntas!</h2><p>Masya Allah, bacaan OWOJ pekan ini selesai. +${r.poin} poin.</p><a class="btn" href="#/owoj" data-tutup>Lihat peta juz</a></div>`);
+      const r = await api('/owoj/baca', { method: 'POST', body: { id: pl.id, halaman: n } });
+      if (r.tuntas) modal(`<div class="selebrasi"><div class="emo">🌟📖🌟</div><h2>Juz ${pl.juz} tuntas!</h2><p>Masya Allah, +${r.poin} poin.</p><a class="btn" href="#/owoj" data-tutup>Lihat peta juz</a></div>`);
       else toast(`Halaman ${n} tercatat ✓`);
       await renderOwojBaca(r.saya, minDetik, sisaHari);
     } catch (e) {
@@ -1428,16 +1446,17 @@ async function renderOwojBaca(pl, minDetik, sisaHari) {
     }
   };
   const u = $('#owoj-undo');
-  if (u) u.onclick = async () => { if (!confirm('Batalkan tanda halaman terakhir?')) return; await coba(() => api('/owoj/batal-baca', { method: 'POST' }), 'Dibatalkan'); viewOwojBaca(); };
+  if (u) u.onclick = async () => { if (!confirm('Batalkan tanda halaman terakhir?')) return; await coba(() => api('/owoj/batal-baca', { method: 'POST', body: { id: pl.id } }), 'Dibatalkan'); viewOwojBaca(pl.id); };
 }
 
 // =========================================================
 //  LAPOR BACA DARI MUSHAF CETAK (offline)
 // =========================================================
-async function laporCetak(jenisAwal = 'tadarus') {
+async function laporCetak(jenisAwal = 'tadarus', pilihanId = null) {
   await muatMeta();
   const [st, ow] = await Promise.all([api('/saya/status?riwayat=1'), api('/owoj').catch(() => null)]);
-  const pl = ow && ow.aktif && ow.saya && !ow.saya.selesai_pada ? ow.saya : null;
+  const daftarPl = ow && ow.aktif ? ow.saya.filter((x) => x.halaman_berikut) : [];
+  const pl = daftarPl.find((x) => x.id === pilihanId) || daftarPl[0] || null;
   const jenis = pl && jenisAwal === 'owoj' ? 'owoj' : 'tadarus';
   const hi = hariIni();
   const kmrn = new Date(Date.now() + 7 * 3600e3 - 864e5).toISOString().slice(0, 10);
@@ -1446,7 +1465,7 @@ async function laporCetak(jenisAwal = 'tadarus') {
     <form id="f-cetak">
       <div class="field"><label>Jenis bacaan</label>
         <label class="row small" style="gap:6px;margin-bottom:6px"><input type="radio" name="jenis" value="tadarus" ${jenis === 'tadarus' ? 'checked' : ''}> Tadarus harian — lanjut dari <b>hlm ${st.halaman_berikut}</b> (${esc(surahDiHalaman(st.halaman_berikut)[1])})</label>
-        ${pl ? `<label class="row small" style="gap:6px"><input type="radio" name="jenis" value="owoj" ${jenis === 'owoj' ? 'checked' : ''}> OWOJ Juz ${pl.juz} — lanjut dari <b>hlm ${pl.halaman_berikut}</b> (sisa ${pl.total - pl.dibaca} hlm)</label>` : ''}
+        ${daftarPl.map((x) => `<label class="row small" style="gap:6px;margin-bottom:6px"><input type="radio" name="jenis" value="owoj:${x.id}" ${jenis === 'owoj' && x.id === pl.id ? 'checked' : ''}> OWOJ Juz ${x.juz} — lanjut dari <b>hlm ${x.halaman_berikut}</b> (sisa ${x.total - x.dibaca} hlm)</label>`).join('')}
       </div>
       <div class="grid g2">
         <div class="field"><label>Jumlah halaman dibaca</label><input class="input" type="number" name="jumlah" min="1" max="100" value="${Math.max(1, st.sisa_hari_ini || 2)}" required></div>
@@ -1460,17 +1479,19 @@ async function laporCetak(jenisAwal = 'tadarus') {
     const f = $('#f-cetak', m);
     const ket = () => {
       const j = f.jenis.value, n = Math.max(1, parseInt(f.jumlah.value || 1));
-      const dari = j === 'owoj' ? pl.halaman_berikut : st.halaman_berikut;
-      const sampai = j === 'owoj' ? Math.min(pl.akhir, dari + n - 1) : ((dari + n - 2) % 604) + 1;
+      const px = j.startsWith('owoj:') ? daftarPl.find((x) => x.id === +j.slice(5)) : null;
+      const dari = px ? px.halaman_berikut : st.halaman_berikut;
+      const sampai = px ? Math.min(px.akhir, dari + n - 1) : ((dari + n - 2) % 604) + 1;
       $('#ket-cetak', m).innerHTML = `Akan dicatat: <b>halaman ${dari} – ${sampai}</b> (${esc(surahDiHalaman(dari)[1])} s.d. ${esc(surahDiHalaman(sampai)[1])}). Pastikan sesuai dengan halaman mushaf cetak yang dibaca (mushaf standar 604 halaman / pojok).`;
     };
     ket(); f.oninput = ket; f.onchange = ket;
     f.onsubmit = async (e) => {
       e.preventDefault();
-      const r = await coba(() => api('/saya/cetak', { method: 'POST', body: { jenis: f.jenis.value, jumlah: parseInt(f.jumlah.value), tanggal: f.tanggal.value, pernyataan: f.pernyataan.checked } }));
+      const jv = f.jenis.value;
+      const r = await coba(() => api('/saya/cetak', { method: 'POST', body: { jenis: jv.startsWith('owoj') ? 'owoj' : 'tadarus', pilihan_id: jv.startsWith('owoj:') ? +jv.slice(5) : null, jumlah: parseInt(f.jumlah.value), tanggal: f.tanggal.value, pernyataan: f.pernyataan.checked } }));
       tutupModal();
       toast(`Laporan tercatat: ${r.dicatat} halaman (hlm ${r.dari}–${r.sampai}) ✓`);
-      if (r.tuntas) toast('Masya Allah, juz OWOJ pekan ini tuntas! 🎉');
+      if (r.tuntas) toast(`Masya Allah, Juz ${r.juz} tuntas! 🎉`);
       router();
     };
   });
@@ -1523,7 +1544,7 @@ async function router() {
   try {
     if ((r = m(/^#\/gabung\/(.+)/))) return await viewGabung(decodeURIComponent(r[1]));
     if (hash === '#/akun') return viewAkun();
-    if (hash === '#/owoj/baca') return await viewOwojBaca();
+    if ((r = m(/^#\/owoj\/baca(?:\/(\d+))?/))) return await viewOwojBaca(r[1] ? parseInt(r[1]) : null);
     if (hash === '#/owoj') return await viewOwoj();
     if ((r = m(/^#\/mushaf\/(\d+)/))) return await viewMushafHalaman(parseInt(r[1]));
     if (hash.startsWith('#/mushaf')) return await viewMushafIndeks();
