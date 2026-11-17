@@ -32,7 +32,9 @@ CREATE TABLE IF NOT EXISTS kelompok (
   hari_aktif TEXT DEFAULT '0123456',  -- 0=Minggu ... 6=Sabtu
   min_detik INTEGER DEFAULT 30,       -- jeda minimal per halaman (anti asal klik)
   tgl_mulai TEXT,                     -- default tgl mulai untuk siswa baru
-  keterangan TEXT
+  keterangan TEXT,
+  kode TEXT UNIQUE,                   -- kode gabung kelompok (dibagikan guru ke murid)
+  kode_aktif INTEGER DEFAULT 1
 );
 
 -- Riwayat target: berlaku mulai tanggal tertentu. Target siswa (siswa_id) menimpa target kelompok.

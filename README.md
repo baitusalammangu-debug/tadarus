@@ -41,6 +41,10 @@ Berjalan di **Cloudflare Pages + D1** (gratis), kode disimpan di **GitHub**.
 
 **Lapor baca mushaf cetak** — untuk bacaan dari mushaf cetak (offline), siswa/guru mengisi jumlah halaman dan tanggal (hari ini/kemarin) disertai pernyataan jujur. Halaman dicatat berurutan (tadarus atau juz OWOJ) dengan tanda **"📗 Mushaf cetak"** yang terlihat oleh guru. Fitur bisa dimatikan admin.
 
+**Kelompok & kode gabung** — dua cara memasukkan murid ke kelompok:
+1. **Admin**: menu Pengguna → Ubah → pilih Kelompok (atau lewat impor CSV).
+2. **Guru**: menu Kelompok → **+ Buat Kelompok** → dapat **kode gabung** (mis. `BAITIJ-6BAJ`). Bagikan kode/tautan (bisa langsung via WhatsApp). Murid memasukkan kode di **Akun → Gabung Kelompok** atau membuka tautan gabung. Guru bisa membuat kode baru, menonaktifkan kode, mengeluarkan anggota, mengganti nama, dan menghapus kelompok kosong.
+
 **Guru**: rekap kelompok (tuntas/belum, hutang, tabungan, poin, posisi halaman, 7 hari terakhir), unduh CSV/cetak, atur target, hari aktif, jeda minimal per halaman, hari libur, pengumuman, peringkat, detail siswa (setor bacaan manual, target khusus, titik mulai).
 
 **Admin**: dasbor, kelompok, pengguna (tambah, ubah, reset password, nonaktifkan, **impor CSV/Excel massal** + cetak kartu akun), libur global, pengaturan (nama lembaga, logo, poin).

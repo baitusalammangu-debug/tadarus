@@ -170,16 +170,24 @@ async function statusBanyakSiswa(db, daftarSiswa, pengaturan, riwayatHari = 0) {
   const kids = [...new Set(daftarSiswa.map((s) => s.kelompok_id).filter(Boolean))];
   const ph = (arr) => arr.map(() => '?').join(',') || 'NULL';
 
+  // D1 membatasi ±100 parameter per kueri & 50 kueri per permintaan (paket gratis):
+  // untuk daftar besar, ambil seluruh data tanpa filter IN lalu saring di memori.
+  const semua = ids.length + kids.length > 80;
   const [kel, jad, lib, log] = await Promise.all([
-    kids.length ? db.prepare(`SELECT * FROM kelompok WHERE id IN (${ph(kids)})`).bind(...kids).all() : { results: [] },
-    db.prepare(`SELECT * FROM jadwal WHERE siswa_id IN (${ph(ids)}) ${kids.length ? `OR kelompok_id IN (${ph(kids)})` : ''} ORDER BY mulai, id`).bind(...ids, ...kids).all(),
-    db.prepare(`SELECT tanggal, kelompok_id FROM libur WHERE kelompok_id IS NULL ${kids.length ? `OR kelompok_id IN (${ph(kids)})` : ''}`).bind(...kids).all(),
-    db.prepare(`SELECT siswa_id, tanggal, COUNT(*) n FROM bacaan WHERE siswa_id IN (${ph(ids)}) GROUP BY siswa_id, tanggal`).bind(...ids).all(),
+    semua ? db.prepare('SELECT * FROM kelompok').all()
+      : kids.length ? db.prepare(`SELECT * FROM kelompok WHERE id IN (${ph(kids)})`).bind(...kids).all() : { results: [] },
+    semua ? db.prepare('SELECT * FROM jadwal ORDER BY mulai, id').all()
+      : db.prepare(`SELECT * FROM jadwal WHERE siswa_id IN (${ph(ids)}) ${kids.length ? `OR kelompok_id IN (${ph(kids)})` : ''} ORDER BY mulai, id`).bind(...ids, ...kids).all(),
+    semua ? db.prepare('SELECT tanggal, kelompok_id FROM libur').all()
+      : db.prepare(`SELECT tanggal, kelompok_id FROM libur WHERE kelompok_id IS NULL ${kids.length ? `OR kelompok_id IN (${ph(kids)})` : ''}`).bind(...kids).all(),
+    semua ? db.prepare('SELECT siswa_id, tanggal, COUNT(*) n FROM bacaan GROUP BY siswa_id, tanggal').all()
+      : db.prepare(`SELECT siswa_id, tanggal, COUNT(*) n FROM bacaan WHERE siswa_id IN (${ph(ids)}) GROUP BY siswa_id, tanggal`).bind(...ids).all(),
   ]);
   const kelMap = Object.fromEntries(kel.results.map((k) => [k.id, k]));
   let owojMap = {};
   try {
-    const ow = await db.prepare(`SELECT user_id, COUNT(*) n FROM owoj_pilihan WHERE selesai_pada IS NOT NULL AND user_id IN (${ph(ids)}) GROUP BY user_id`).bind(...ids).all();
+    const ow = semua ? await db.prepare('SELECT user_id, COUNT(*) n FROM owoj_pilihan WHERE selesai_pada IS NOT NULL GROUP BY user_id').all()
+      : await db.prepare(`SELECT user_id, COUNT(*) n FROM owoj_pilihan WHERE selesai_pada IS NOT NULL AND user_id IN (${ph(ids)}) GROUP BY user_id`).bind(...ids).all();
     owojMap = Object.fromEntries(ow.results.map((r) => [r.user_id, r.n]));
   } catch {}
   const poinOwoj = parseInt(pengaturan.owoj_poin ?? '50');
@@ -187,7 +195,7 @@ async function statusBanyakSiswa(db, daftarSiswa, pengaturan, riwayatHari = 0) {
   if ((pengaturan.owoj_hitung_tadarus ?? '1') !== '0') {
     try {
       const ol = await db.prepare(`SELECT p.user_id, date(b.waktu, '+7 hours') AS t, COUNT(*) n FROM owoj_baca b JOIN owoj_pilihan p ON p.id = b.pilihan_id
-        WHERE p.user_id IN (${ph(ids)}) GROUP BY p.user_id, t`).bind(...ids).all();
+        ${semua ? '' : `WHERE p.user_id IN (${ph(ids)})`} GROUP BY p.user_id, t`).bind(...(semua ? [] : ids)).all();
       for (const r of ol.results) (owojLog[r.user_id] ||= {})[r.t] = r.n;
     } catch {}
   }
@@ -282,7 +290,10 @@ const SKEMA = [
 let skemaSiap = false;
 const MIGRASI = [
   "ALTER TABLE owoj_baca ADD COLUMN sumber TEXT DEFAULT 'app'",
-  "INSERT OR IGNORE INTO pengaturan (kunci, nilai) VALUES ('target_guru','2'),('tadarus_guru_aktif','1'),('owoj_hitung_tadarus','1'),('izin_cetak','1')",
+  "INSERT OR IGNORE INTO pengaturan (kunci, nilai) VALUES ('target_guru','2'),('tadarus_guru_aktif','1'),('owoj_hitung_tadarus','1'),('izin_cetak','1'),('owoj_cakupan','sekolah')",
+  "ALTER TABLE kelompok ADD COLUMN kode TEXT",
+  "ALTER TABLE kelompok ADD COLUMN kode_aktif INTEGER DEFAULT 1",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_kelompok_kode ON kelompok(kode)",
 ];
 async function pastikanSkema(db) {
   if (skemaSiap) return;
@@ -429,20 +440,26 @@ const HANDLER = {
       (SELECT halaman_per_hari FROM jadwal j WHERE j.kelompok_id = k.id AND j.siswa_id IS NULL AND j.mulai <= ? ORDER BY j.mulai DESC, j.id DESC LIMIT 1) AS target
       FROM kelompok k LEFT JOIN users g ON g.id = k.guru_id ${where} ORDER BY k.nama`);
     const { results } = u.peran === 'guru' ? await st.bind(hariIniWIB(), u.id).all() : await st.bind(hariIniWIB()).all();
+    for (const k of results) if (!k.kode) { k.kode = await kodeBaru(db, k.nama); await db.prepare('UPDATE kelompok SET kode = ? WHERE id = ?').bind(k.kode, k.id).run(); }
     return json(results);
   },
 
   'POST /kelompok': async ({ db, u, body }) => {
-    wajibPeran(u, 'admin');
+    wajibPeran(u, 'admin', 'guru');
     if (!body.nama) throw new HttpError('Nama kelompok wajib diisi');
+    if (u.peran === 'guru') body.guru_id = u.id;   // kelompok buatan guru otomatis dibimbing guru tsb
     const p = await ambilPengaturan(db);
     const mulai = validTgl(body.tgl_mulai) ? body.tgl_mulai : hariIniWIB();
     const r = await db.prepare('INSERT INTO kelompok (nama, guru_id, hari_aktif, min_detik, tgl_mulai, keterangan) VALUES (?,?,?,?,?,?)')
       .bind(body.nama, body.guru_id || null, body.hari_aktif || '0123456', parseInt(body.min_detik ?? 30), mulai, body.keterangan || null).run();
     const kid = r.meta.last_row_id;
-    await db.prepare('INSERT INTO jadwal (kelompok_id, mulai, halaman_per_hari, dibuat_oleh) VALUES (?,?,?,?)')
-      .bind(kid, mulai, parseInt(body.halaman_per_hari || p.default_halaman_per_hari || 2), u.id).run();
-    return json({ id: kid });
+    const kode = await kodeBaru(db, body.nama);
+    await db.batch([
+      db.prepare('INSERT INTO jadwal (kelompok_id, mulai, halaman_per_hari, dibuat_oleh) VALUES (?,?,?,?)')
+        .bind(kid, mulai, parseInt(body.halaman_per_hari || p.default_halaman_per_hari || 2), u.id),
+      db.prepare('UPDATE kelompok SET kode = ?, kode_aktif = 1 WHERE id = ?').bind(kode, kid),
+    ]);
+    return json({ id: kid, kode });
   },
 
   'PUT /kelompok/:id': async ({ db, u, body, id }) => {
@@ -451,13 +468,14 @@ const HANDLER = {
     const k = await db.prepare('SELECT * FROM kelompok WHERE id = ?').bind(id).first();
     const v = { ...k, ...body };
     if (u.peran === 'guru') { v.guru_id = k.guru_id; v.nama = body.nama || k.nama; }
-    await db.prepare('UPDATE kelompok SET nama=?, guru_id=?, hari_aktif=?, min_detik=?, tgl_mulai=?, keterangan=? WHERE id=?')
-      .bind(v.nama, v.guru_id || null, String(v.hari_aktif ?? '0123456'), parseInt(v.min_detik ?? 30), v.tgl_mulai, v.keterangan || null, id).run();
+    await db.prepare('UPDATE kelompok SET nama=?, guru_id=?, hari_aktif=?, min_detik=?, tgl_mulai=?, keterangan=?, kode_aktif=? WHERE id=?')
+      .bind(v.nama, v.guru_id || null, String(v.hari_aktif ?? '0123456'), parseInt(v.min_detik ?? 30), v.tgl_mulai, v.keterangan || null, v.kode_aktif === 0 || v.kode_aktif === '0' ? 0 : 1, id).run();
     return json({ ok: true });
   },
 
   'DELETE /kelompok/:id': async ({ db, u, id }) => {
-    wajibPeran(u, 'admin');
+    wajibPeran(u, 'admin', 'guru');
+    await cekAksesKelompok(db, u, id);
     const n = await db.prepare(`SELECT COUNT(*) n FROM users WHERE kelompok_id = ? AND peran='siswa'`).bind(id).first();
     if (n.n > 0) throw new HttpError('Kelompok masih memiliki siswa. Pindahkan siswa terlebih dahulu.');
     await db.batch([
@@ -649,7 +667,7 @@ const HANDLER = {
     wajibPeran(u, 'admin');
     const list = Array.isArray(body.users) ? body.users : [];
     if (!list.length) throw new HttpError('Data kosong');
-    if (list.length > 500) throw new HttpError('Maksimal 500 baris per impor');
+    if (list.length > 25) throw new HttpError('Maksimal 25 baris per permintaan (aplikasi mengirim bertahap otomatis)');
     const { results: kel } = await db.prepare('SELECT id, nama FROM kelompok').all();
     const kelMap = Object.fromEntries(kel.map((k) => [k.nama.trim().toLowerCase(), k.id]));
     const ok = [], gagal = [];
@@ -707,7 +725,7 @@ const HANDLER = {
 
   'PUT /pengaturan': async ({ db, u, body }) => {
     wajibPeran(u, 'admin');
-    const izin = ['nama_lembaga', 'sub_judul', 'poin_harian', 'poin_khatam', 'default_halaman_per_hari', 'logo', 'owoj_aktif', 'owoj_hari_mulai', 'owoj_juz_unik', 'owoj_poin', 'owoj_hitung_tadarus', 'target_guru', 'tadarus_guru_aktif', 'izin_cetak'];
+    const izin = ['nama_lembaga', 'sub_judul', 'poin_harian', 'poin_khatam', 'default_halaman_per_hari', 'logo', 'owoj_aktif', 'owoj_hari_mulai', 'owoj_juz_unik', 'owoj_poin', 'owoj_hitung_tadarus', 'target_guru', 'tadarus_guru_aktif', 'izin_cetak', 'owoj_cakupan'];
     const stmts = Object.entries(body).filter(([k]) => izin.includes(k))
       .map(([k, v]) => db.prepare('INSERT INTO pengaturan (kunci, nilai) VALUES (?,?) ON CONFLICT(kunci) DO UPDATE SET nilai = excluded.nilai').bind(k, String(v ?? '')));
     if (stmts.length) await db.batch(stmts);
@@ -773,7 +791,9 @@ async function peringkat(db, kelompokId) {
 // =========================================================
 const JUZ = [[1,1,21],[2,22,41],[3,42,61],[4,62,81],[5,82,101],[6,102,121],[7,122,141],[8,142,161],[9,162,181],[10,182,201],[11,202,221],[12,222,241],[13,242,262],[14,262,281],[15,282,301],[16,302,321],[17,322,341],[18,342,361],[19,362,382],[20,382,401],[21,401,421],[22,422,441],[23,441,461],[24,462,481],[25,482,502],[26,502,521],[27,522,541],[28,542,561],[29,562,581],[30,582,604]];
 const halJuz = (j) => { const r = JUZ[j - 1]; return { awal: r[1], akhir: r[2], total: r[2] - r[1] + 1 }; };
-const OWOJ_DEF = { owoj_aktif: '1', owoj_hari_mulai: '1', owoj_juz_unik: '1', owoj_poin: '50' };
+const OWOJ_DEF = { owoj_aktif: '1', owoj_hari_mulai: '1', owoj_juz_unik: '1', owoj_poin: '50', owoj_cakupan: 'sekolah' };
+// cakupan 'sekolah' = semua murid & guru berbagi satu peta 30 juz; 'kelompok' = peta per kelompok
+const perKelompok = (p) => p.owoj_cakupan === 'kelompok';
 function pekanDari(tgl, hariMulai) {
   const h = hariKe(tgl);
   const mulai = tambahHari(tgl, -((h - hariMulai + 7) % 7));
@@ -807,10 +827,11 @@ async function pilihanAktif(db, userId, pekan) {
   const hj = halJuz(r.juz);
   return { ...r, ...hj, halaman_berikut: r.dibaca >= hj.total ? null : hj.awal + r.dibaca, persen: Math.round((r.dibaca / hj.total) * 100) };
 }
-async function petaJuz(db, kelompokId, pekan) {
-  const { results } = await db.prepare(`SELECT p.id, p.juz, p.user_id, p.selesai_pada, u.nama, u.peran,
+async function petaJuz(db, kelompokId, pekan, satuSekolah = false) {
+  const { results } = await db.prepare(`SELECT p.id, p.juz, p.user_id, p.selesai_pada, u.nama, u.peran, k.nama AS kelompok_nama,
       (SELECT COUNT(*) FROM owoj_baca b WHERE b.pilihan_id = p.id) AS dibaca
-      FROM owoj_pilihan p JOIN users u ON u.id = p.user_id WHERE p.pekan = ? AND p.kelompok_id = ? ORDER BY p.juz, p.id`).bind(pekan, kelompokId).all();
+      FROM owoj_pilihan p JOIN users u ON u.id = p.user_id LEFT JOIN kelompok k ON k.id = p.kelompok_id
+      WHERE p.pekan = ? ${satuSekolah ? '' : 'AND p.kelompok_id = ?'} ORDER BY p.juz, p.id`).bind(...(satuSekolah ? [pekan] : [pekan, kelompokId])).all();
   return results.map((r) => ({ ...r, total: halJuz(r.juz).total }));
 }
 
@@ -822,8 +843,9 @@ Object.assign(HANDLER, {
     const pekan = validTgl(url.searchParams.get('pekan')) ? pekanDari(url.searchParams.get('pekan'), parseInt(I.p.owoj_hari_mulai)).mulai : I.pekan;
     const saya = await pilihanAktif(db, u.id, I.pekan);
     const sayaDepan = await pilihanAktif(db, u.id, I.pekan_depan);
-    const peta = await petaJuz(db, kid, pekan);
-    const petaDepan = await petaJuz(db, kid, I.pekan_depan);
+    const sekolah = !perKelompok(I.p);
+    const peta = await petaJuz(db, kid, pekan, sekolah);
+    const petaDepan = await petaJuz(db, kid, I.pekan_depan, sekolah);
     const riwayat = await db.prepare(`SELECT p.pekan, p.juz, p.selesai_pada, (SELECT COUNT(*) FROM owoj_baca b WHERE b.pilihan_id = p.id) AS dibaca
       FROM owoj_pilihan p WHERE p.user_id = ? ORDER BY p.pekan DESC LIMIT 12`).bind(u.id).all();
     const kelompok = kid ? await db.prepare('SELECT id, nama, min_detik FROM kelompok WHERE id = ?').bind(kid).first() : null;
@@ -834,13 +856,13 @@ Object.assign(HANDLER, {
     }
     // ringkasan pekan-pekan sebelumnya untuk kelompok (khatam bersama)
     const { results: ringkas } = await db.prepare(`SELECT pekan, COUNT(*) AS peserta, SUM(CASE WHEN selesai_pada IS NOT NULL THEN 1 ELSE 0 END) AS tuntas,
-      COUNT(DISTINCT CASE WHEN selesai_pada IS NOT NULL THEN juz END) AS juz_tuntas FROM owoj_pilihan WHERE kelompok_id = ? GROUP BY pekan ORDER BY pekan DESC LIMIT 12`).bind(kid).all();
+      COUNT(DISTINCT CASE WHEN selesai_pada IS NOT NULL THEN juz END) AS juz_tuntas FROM owoj_pilihan WHERE ${sekolah ? '1=1' : 'kelompok_id = ?'} GROUP BY pekan ORDER BY pekan DESC LIMIT 12`).bind(...(sekolah ? [] : [kid])).all();
     return json({
       aktif: I.p.owoj_aktif !== '0', hari_ini: I.hari_ini, pekan, pekan_ini: I.pekan, akhir: pekanDari(pekan, parseInt(I.p.owoj_hari_mulai)).akhir, sisa_hari: I.sisa_hari,
       juz_unik: I.p.owoj_juz_unik !== '0', poin: parseInt(I.p.owoj_poin), kelompok, kelompok_id: kid, kelompok_saya: kelompokSaya,
       saya, peta, riwayat: riwayat.results, ringkas, min_detik: kelompok?.min_detik ?? 30,
       pekan_depan: I.pekan_depan, akhir_depan: tambahHari(I.pekan_depan, 6), saya_depan: sayaDepan, peta_depan: petaDepan,
-      izin_cetak: (I.p.izin_cetak ?? '1') !== '0',
+      izin_cetak: (I.p.izin_cetak ?? '1') !== '0', cakupan: sekolah ? 'sekolah' : 'kelompok',
     });
   },
 
@@ -856,7 +878,8 @@ Object.assign(HANDLER, {
     const lama = await pilihanAktif(db, u.id, pekan);
     if (lama && lama.dibaca > 0) throw new HttpError(`Anda sudah mulai membaca Juz ${lama.juz} pekan ini, tidak bisa mengganti juz.`);
     if (I.p.owoj_juz_unik !== '0') {
-      const ada = await db.prepare('SELECT u.nama FROM owoj_pilihan p JOIN users u ON u.id = p.user_id WHERE p.pekan = ? AND p.kelompok_id = ? AND p.juz = ? AND p.user_id != ?').bind(pekan, kid, juz, u.id).first();
+      const sk = !perKelompok(I.p);
+      const ada = await db.prepare(`SELECT u.nama FROM owoj_pilihan p JOIN users u ON u.id = p.user_id WHERE p.pekan = ? ${sk ? '' : 'AND p.kelompok_id = ?'} AND p.juz = ? AND p.user_id != ?`).bind(...(sk ? [pekan, juz, u.id] : [pekan, kid, juz, u.id])).first();
       if (ada) throw new HttpError(`Juz ${juz} ${depan ? 'pekan depan ' : ''}sudah dipilih oleh ${ada.nama}. Silakan pilih juz lain.`);
     }
     if (lama) await db.prepare('UPDATE owoj_pilihan SET juz = ?, kelompok_id = ? WHERE id = ?').bind(juz, kid, lama.id).run();
@@ -914,7 +937,7 @@ Object.assign(HANDLER, {
     await cekAksesKelompok(db, u, id);
     const I = await infoPekan(db);
     const pekan = validTgl(url.searchParams.get('pekan')) ? pekanDari(url.searchParams.get('pekan'), parseInt(I.p.owoj_hari_mulai)).mulai : I.pekan;
-    const peta = await petaJuz(db, id, pekan);
+    const peta = await petaJuz(db, id, pekan, !perKelompok(I.p));
     const { results: anggota } = await db.prepare(`SELECT id, nama, nis, username FROM users WHERE peran='siswa' AND aktif=1 AND kelompok_id = ? ORDER BY nama`).bind(id).all();
     const byUser = Object.fromEntries(peta.map((x) => [x.user_id, x]));
     const guruIkut = peta.filter((x) => x.peran !== 'siswa');
@@ -978,5 +1001,61 @@ Object.assign(HANDLER, {
     for (const g of results) if (!g.tgl_mulai) g.tgl_mulai = hariIniWIB();
     const data = await statusBanyakSiswa(db, results, p, 7);
     return json(data.map((d) => ({ ...d.siswa, ...d.status })));
+  },
+});
+
+// =========================================================
+//  KODE GABUNG KELOMPOK
+// =========================================================
+const HURUF_KODE = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // tanpa O/0/I/1 agar tidak tertukar
+async function kodeBaru(db, nama) {
+  const awal = String(nama || 'GRUP').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'GRUP';
+  for (let i = 0; i < 20; i++) {
+    const acak = Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => HURUF_KODE[b % HURUF_KODE.length]).join('');
+    const kode = `${awal}-${acak}`;
+    const ada = await db.prepare('SELECT id FROM kelompok WHERE kode = ?').bind(kode).first();
+    if (!ada) return kode;
+  }
+  throw new HttpError('Gagal membuat kode, coba lagi');
+}
+Object.assign(HANDLER, {
+  // cek kode sebelum bergabung
+  'GET /gabung': async ({ db, u, url }) => {
+    wajibPeran(u, 'siswa');
+    const kode = String(url.searchParams.get('kode') || '').trim().toUpperCase();
+    const k = await db.prepare('SELECT k.id, k.nama, k.kode_aktif, g.nama AS guru_nama FROM kelompok k LEFT JOIN users g ON g.id = k.guru_id WHERE upper(k.kode) = ?').bind(kode).first();
+    if (!k) throw new HttpError('Kode kelompok tidak ditemukan. Periksa kembali kodenya.', 404);
+    if (k.kode_aktif === 0) throw new HttpError('Kode kelompok ini sedang dinonaktifkan oleh guru.');
+    const target = await db.prepare('SELECT halaman_per_hari FROM jadwal WHERE kelompok_id = ? AND siswa_id IS NULL AND mulai <= ? ORDER BY mulai DESC, id DESC LIMIT 1').bind(k.id, hariIniWIB()).first();
+    return json({ ...k, target: target?.halaman_per_hari ?? 0, sudah_anggota: u.kelompok_id === k.id });
+  },
+  'POST /gabung': async ({ db, u, body }) => {
+    wajibPeran(u, 'siswa');
+    const kode = String(body.kode || '').trim().toUpperCase();
+    const k = await db.prepare('SELECT id, nama, kode_aktif, tgl_mulai FROM kelompok WHERE upper(kode) = ?').bind(kode).first();
+    if (!k) throw new HttpError('Kode kelompok tidak ditemukan', 404);
+    if (k.kode_aktif === 0) throw new HttpError('Kode kelompok ini sedang dinonaktifkan oleh guru.');
+    if (u.kelompok_id === k.id) return json({ ok: true, kelompok: k.nama });
+    const adaBacaan = await db.prepare('SELECT COUNT(*) n FROM bacaan WHERE siswa_id = ?').bind(u.id).first();
+    // belum punya kelompok/riwayat → jadwal dimulai hari ini (atau tanggal mulai kelompok bila lebih akhir)
+    let tgl = u.tgl_mulai;
+    if (!u.kelompok_id || !adaBacaan.n || !tgl) { tgl = hariIniWIB(); if (k.tgl_mulai && k.tgl_mulai > tgl) tgl = k.tgl_mulai; }
+    await db.prepare('UPDATE users SET kelompok_id = ?, tgl_mulai = ? WHERE id = ?').bind(k.id, tgl, u.id).run();
+    return json({ ok: true, kelompok: k.nama });
+  },
+  'POST /kelompok/:id/kode': async ({ db, u, id }) => {
+    wajibPeran(u, 'admin', 'guru');
+    await cekAksesKelompok(db, u, id);
+    const k = await db.prepare('SELECT nama FROM kelompok WHERE id = ?').bind(id).first();
+    const kode = await kodeBaru(db, k.nama);
+    await db.prepare('UPDATE kelompok SET kode = ?, kode_aktif = 1 WHERE id = ?').bind(kode, id).run();
+    return json({ ok: true, kode });
+  },
+  'POST /kelompok/:id/keluarkan': async ({ db, u, id, body }) => {
+    wajibPeran(u, 'admin', 'guru');
+    await cekAksesKelompok(db, u, id);
+    const r = await db.prepare(`UPDATE users SET kelompok_id = NULL WHERE id = ? AND kelompok_id = ? AND peran = 'siswa'`).bind(parseInt(body.siswa_id), id).run();
+    if (!r.meta.changes) throw new HttpError('Siswa tidak ditemukan di kelompok ini');
+    return json({ ok: true });
   },
 });

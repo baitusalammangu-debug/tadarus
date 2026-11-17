@@ -145,7 +145,8 @@ async function viewLogin() {
       const r = await api('/login', { method: 'POST', body: f });
       S.token = r.token; localStorage.setItem('tadarus_token', r.token);
       await muatSaya();
-      location.hash = '#/'; router();
+      const kg = sessionStorage.getItem('kode_gabung');
+      location.hash = kg && S.me.user.peran === 'siswa' ? '#/gabung/' + encodeURIComponent(kg) : '#/'; router();
     } catch (er) { toast(er.message, true); btn.disabled = false; btn.textContent = 'Masuk'; }
   };
 }
@@ -243,6 +244,7 @@ async function viewBerandaSiswa() {
     ${S.me.pengaturan.izin_cetak !== '0' ? `<button class="btn putih blok" style="margin-top:8px;background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.3)" onclick="laporCetak('tadarus')">📗 Sudah membaca dari mushaf cetak? Laporkan di sini</button>` : ''}
   </section>
   <div class="alert ${st.notif.jenis}">${{ sukses: '✅', bahaya: '⏰', peringatan: '📌', info: 'ℹ️' }[st.notif.jenis]} <span>${esc(st.notif.teks)}</span></div>
+  ${u.peran === 'siswa' && !S.me.kelompok ? `<a class="card row spread" href="#/akun" style="color:inherit;border-left:5px solid var(--biru)"><div><b>👥 Kamu belum masuk kelompok</b><div class="small muted">Masukkan kode gabung dari gurumu agar mendapat target tadarus.</div></div><span class="btn kecil">Masukkan kode</span></a>` : ''}
   ${kartuOwoj}
   ${notifCard}
   <div class="grid g4" style="margin-bottom:16px">
@@ -680,6 +682,9 @@ function viewAkun() {
       <div class="field"><label>Ulangi password baru</label><input class="input" type="password" name="ulang" minlength="6" required></div>
       <button class="btn">Simpan Password</button>
     </form></div>
+  ${u.peran === 'siswa' ? `<div class="card"><h3>👥 Gabung Kelompok</h3>
+    <p class="small muted" style="margin-top:-4px">${S.me.kelompok ? `Kelompok saat ini: <b>${esc(S.me.kelompok.nama)}</b>. Memasukkan kode lain akan memindahkanmu ke kelompok tersebut.` : 'Kamu belum masuk kelompok. Minta kode gabung kepada gurumu.'}</p>
+    <form id="f-gabung" class="row"><input class="input" name="kode" placeholder="Contoh: BAITIJ-7K2Q" style="flex:1;min-width:170px;text-transform:uppercase" required><button class="btn">Gabung</button></form></div>` : ''}
   ${u.peran === 'siswa' ? `<div class="card row spread"><div><b>🔔 Pengingat harian</b><div class="small muted">${notifOk ? 'Aktif di perangkat ini.' : 'Belum aktif di perangkat ini.'}</div></div>
     ${notifOk ? '<button class="btn sec kecil" id="tes-notif">Tes notifikasi</button>' : '<button class="btn kecil" onclick="aktifkanNotif()">Aktifkan</button>'}</div>
     <div class="card small muted">💡 Tips: pasang aplikasi ini di layar utama HP (menu browser → <i>Tambahkan ke layar utama / Install app</i>) agar pengingat lebih andal dan mushaf bisa dibaca offline.</div>` : ''}
@@ -693,6 +698,8 @@ function viewAkun() {
     S.me.user.wajib_ganti_pw = 0; location.hash = '#/';
   };
   $('#btn-keluar').onclick = () => keluar();
+  const fg = $('#f-gabung');
+  if (fg) fg.onsubmit = (e) => { e.preventDefault(); location.hash = '#/gabung/' + encodeURIComponent(e.target.kode.value.trim().toUpperCase()); };
   const tn = $('#tes-notif');
   if (tn) tn.onclick = async () => {
     const reg = await navigator.serviceWorker?.ready;
@@ -712,12 +719,40 @@ async function viewDaftarKelompok() {
     <a class="card row spread" href="#/saya" style="color:inherit;border-left:5px solid ${st.selesai_hari_ini ? 'var(--hijau)' : st.hutang ? 'var(--merah)' : 'var(--emas)'}">
       <div><b>📖 Tadarus saya hari ini</b><div class="small muted">${st.selesai_hari_ini ? `Tuntas ✓ · dibaca ${st.dibaca_hari_ini} halaman` : `Wajib ${st.sisa_hari_ini} halaman lagi${st.hutang ? ` (termasuk hutang ${st.hutang})` : ''}`} · ⭐ ${st.poin} poin</div></div>
       <span class="btn kecil ${st.selesai_hari_ini ? 'sec' : 'emas'}">${st.selesai_hari_ini ? 'Lihat' : 'Baca'}</span></a>` : '';
-  shell(`${kartu}<h1>Kelompok Tadarus</h1>
+  shell(`${kartu}<div class="row spread"><h1 style="margin:0">Kelompok Tadarus</h1><button class="btn" onclick="formKelompokBaru()">+ Buat Kelompok</button></div>
+  <p class="small muted">Buat kelompok/halaqah sendiri lalu bagikan <b>kode gabung</b> kepada murid. Murid memasukkan kode di menu Akun.</p>
   ${data.length ? `<div class="grid g3" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))">${data.map((k) => `
     <a class="card kelompok-card" href="#/k/${k.id}">
       <div class="row spread"><b style="font-size:1.05rem">${esc(k.nama)}</b><span class="badge hijau">${k.jumlah_siswa} siswa</span></div>
       <div class="small muted" style="margin-top:6px">🎯 ${k.target ?? 0} halaman/hari · 👤 ${esc(k.guru_nama || 'Belum ada guru')}</div>
-    </a>`).join('')}</div>` : '<div class="card kosong">Belum ada kelompok yang ditugaskan kepada Anda. Hubungi admin.</div>'}`);
+      <div class="kode-mini">🔑 ${esc(k.kode || '-')}${k.kode_aktif === 0 ? ' <span class="badge">nonaktif</span>' : ''}</div>
+    </a>`).join('')}</div>` : '<div class="card kosong">Belum ada kelompok. Klik <b>+ Buat Kelompok</b> untuk membuat kelompok dan mendapatkan kode gabung.</div>'}`);
+}
+
+function formKelompokBaru() {
+  const p = S.me.pengaturan;
+  modal(`<h2>Buat Kelompok Baru</h2><form id="f-kb">
+    <div class="field"><label>Nama kelompok</label><input class="input" name="nama" placeholder="mis. Baiti Jannaty" required></div>
+    <div class="grid g2"><div class="field"><label>Target halaman/hari</label><input class="input" type="number" name="halaman_per_hari" min="0" max="604" value="${p.default_halaman_per_hari || 2}"></div>
+    <div class="field"><label>Mulai program</label><input class="input" type="date" name="tgl_mulai" value="${hariIni()}"></div></div>
+    <div class="field"><label>Hari wajib tadarus</label><div class="chip-hari">${HARI.map((h, i) => `<label><input type="checkbox" name="h" value="${i}" checked> ${h.slice(0, 3)}</label>`).join('')}</div></div>
+    <div class="row"><button class="btn">Buat & dapatkan kode</button><button type="button" class="btn sec" data-tutup>Batal</button></div></form>`, (m) => {
+    $('#f-kb', m).onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = { nama: fd.get('nama'), halaman_per_hari: fd.get('halaman_per_hari'), tgl_mulai: fd.get('tgl_mulai'), hari_aktif: fd.getAll('h').join('') };
+      const r = await coba(() => api('/kelompok', { method: 'POST', body }), 'Kelompok dibuat');
+      tutupModal();
+      location.hash = `#/k/${r.id}/anggota`;
+    };
+  });
+}
+window.formKelompokBaru = formKelompokBaru;
+
+function tautanGabung(kode) { return `${location.origin}/#/gabung/${encodeURIComponent(kode)}`; }
+function bagikanKode(k) {
+  const teks = `Assalamu'alaikum. Ayo bergabung di kelompok tadarus *${k.nama}*.\n\n1. Buka ${location.origin}\n2. Login dengan akun masing-masing\n3. Masuk menu Akun → Gabung Kelompok, masukkan kode: *${k.kode}*\n\nAtau langsung klik: ${tautanGabung(k.kode)}`;
+  return teks;
 }
 
 const STATUS_BADGE = (s) => s.selesai_hari_ini
@@ -742,7 +777,7 @@ async function viewKelompok(id, tab = 'rekap') {
     <div class="stat emas"><div class="n">${sis.length - selesai}</div><div class="l">Belum tuntas</div></div>
     <div class="stat merah"><div class="n">${berhutang}</div><div class="l">Punya hutang</div></div>
   </div>
-  <div class="tabs">${[['rekap', 'Rekap'], ['target', 'Target'], ['hari', 'Hari & Libur'], ['umum', 'Pengumuman'], ['rank', 'Peringkat']].map(([t, l]) => `<button data-t="${t}" class="${tab === t ? 'aktif' : ''}">${l}</button>`).join('')}</div>
+  <div class="tabs">${[['rekap', 'Rekap'], ['anggota', 'Anggota & Kode'], ['target', 'Target'], ['hari', 'Hari & Libur'], ['umum', 'Pengumuman'], ['rank', 'Peringkat']].map(([t, l]) => `<button data-t="${t}" class="${tab === t ? 'aktif' : ''}">${l}</button>`).join('')}</div>
   <div id="isi-tab"></div>`);
   $$('.tabs button', main).forEach((b) => (b.onclick = () => { $$('.tabs button').forEach((x) => x.classList.toggle('aktif', x === b)); renderTab(b.dataset.t); }));
 
@@ -844,6 +879,41 @@ async function viewKelompok(id, tab = 'rekap') {
       };
       $$('[data-hapus-umum]', el).forEach((b) => (b.onclick = async () => { await coba(() => api('/pengumuman/' + b.dataset.hapusUmum, { method: 'DELETE' }), 'Dihapus'); viewKelompok(id, 'umum'); }));
     }
+    if (t === 'anggota') {
+      const kode = k.kode || '-';
+      el.innerHTML = `<div class="card kode-card">
+        <div class="small muted">Kode gabung kelompok</div>
+        <div class="kode-besar">${esc(kode)}</div>
+        <div class="small ${k.kode_aktif === 0 ? '' : 'muted'}">${k.kode_aktif === 0 ? '⛔ Kode sedang dinonaktifkan — murid tidak bisa bergabung.' : 'Bagikan kode ini kepada murid. Murid memasukkannya di menu <b>Akun → Gabung Kelompok</b>.'}</div>
+        <div class="row" style="justify-content:center;margin-top:12px">
+          <button class="btn kecil" id="salin-kode">📋 Salin kode</button>
+          <button class="btn sec kecil" id="salin-link">🔗 Salin tautan gabung</button>
+          <a class="btn kecil" style="background:#25d366" target="_blank" href="https://wa.me/?text=${encodeURIComponent(bagikanKode(k))}">Bagikan via WhatsApp</a>
+        </div>
+        <div class="row" style="justify-content:center;margin-top:8px">
+          <button class="btn putih kecil" id="kode-baru">🔄 Buat kode baru</button>
+          <button class="btn putih kecil" id="kode-togel">${k.kode_aktif === 0 ? '✅ Aktifkan kode' : '⛔ Nonaktifkan kode'}</button>
+        </div>
+        <p class="tiny muted">Membuat kode baru membuat kode lama tidak berlaku. Anggota yang sudah bergabung tetap di kelompok.</p>
+      </div>
+      <div class="card"><h3>Anggota (${sis.length})</h3>
+        ${sis.length ? sis.map((x) => `<div class="row spread" style="padding:8px 0;border-bottom:1px solid #f0ede4"><div><b>${esc(x.nama)}</b><div class="tiny muted">@${esc(x.username)}${x.nis ? ' · NIS ' + esc(x.nis) : ''}</div></div>
+          <button class="btn putih kecil" data-keluar="${x.id}" data-nama="${esc(x.nama)}">Keluarkan</button></div>`).join('') : '<div class="kosong">Belum ada anggota. Bagikan kode di atas.</div>'}
+      </div>
+      <div class="card"><h3>Ubah kelompok</h3><form id="f-ubah-k" class="row"><input class="input" name="nama" value="${esc(k.nama)}" style="flex:1;min-width:180px" required><button class="btn">Simpan nama</button></form>
+        <button class="btn merah kecil" id="hapus-k" style="margin-top:12px">Hapus kelompok</button><span class="tiny muted"> (hanya bila tidak ada anggota)</span></div>`;
+      const salin = async (t, pesan) => { try { await navigator.clipboard.writeText(t); toast(pesan); } catch { prompt('Salin teks berikut:', t); } };
+      $('#salin-kode').onclick = () => salin(kode, 'Kode disalin ✓');
+      $('#salin-link').onclick = () => salin(tautanGabung(kode), 'Tautan gabung disalin ✓');
+      $('#kode-baru').onclick = async () => { if (!confirm('Buat kode baru? Kode lama tidak bisa dipakai lagi.')) return; await coba(() => api(`/kelompok/${id}/kode`, { method: 'POST' }), 'Kode baru dibuat'); viewKelompok(id, 'anggota'); };
+      $('#kode-togel').onclick = async () => { await coba(() => api('/kelompok/' + id, { method: 'PUT', body: { kode_aktif: k.kode_aktif === 0 ? 1 : 0 } }), 'Disimpan'); viewKelompok(id, 'anggota'); };
+      $$('[data-keluar]', el).forEach((b) => (b.onclick = async () => {
+        if (!confirm(`Keluarkan ${b.dataset.nama} dari kelompok ini? Riwayat bacaannya tetap tersimpan.`)) return;
+        await coba(() => api(`/kelompok/${id}/keluarkan`, { method: 'POST', body: { siswa_id: +b.dataset.keluar } }), 'Dikeluarkan'); viewKelompok(id, 'anggota');
+      }));
+      $('#f-ubah-k').onsubmit = async (e) => { e.preventDefault(); await coba(() => api('/kelompok/' + id, { method: 'PUT', body: { nama: e.target.nama.value } }), 'Disimpan'); viewKelompok(id, 'anggota'); };
+      $('#hapus-k').onclick = async () => { if (!confirm('Hapus kelompok ini?')) return; await coba(() => api('/kelompok/' + id, { method: 'DELETE' }), 'Kelompok dihapus'); location.hash = S.me.user.peran === 'admin' ? '#/kelompok' : '#/'; };
+    }
     if (t === 'rank') {
       el.innerHTML = '<div class="card kosong">Memuat…</div>';
       const r = await api('/peringkat/' + id);
@@ -928,10 +998,10 @@ async function viewAdminKelompok() {
   const p = S.me.pengaturan;
   shell(`<div class="row spread"><h1 style="margin:0">Kelompok</h1><button class="btn" id="tambah">+ Kelompok</button></div>
   <p class="small muted">Kelompok = kelas/halaqah. Setiap kelompok punya guru pembimbing, target halaman per hari dan hari aktif.</p>
-  <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nama</th><th>Guru</th><th>Siswa</th><th>Target</th><th>Hari aktif</th><th></th></tr></thead><tbody>
-  ${kel.map((k) => `<tr><td><a href="#/k/${k.id}"><b>${esc(k.nama)}</b></a></td><td>${esc(k.guru_nama || '-')}</td><td>${k.jumlah_siswa}</td><td>${k.target ?? 0} hlm/hari</td>
+  <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nama</th><th>Kode gabung</th><th>Guru</th><th>Siswa</th><th>Target</th><th>Hari aktif</th><th></th></tr></thead><tbody>
+  ${kel.map((k) => `<tr><td><a href="#/k/${k.id}"><b>${esc(k.nama)}</b></a></td><td><a href="#/k/${k.id}/anggota"><code>${esc(k.kode || '-')}</code></a></td><td>${esc(k.guru_nama || '-')}</td><td>${k.jumlah_siswa}</td><td>${k.target ?? 0} hlm/hari</td>
   <td class="small">${(k.hari_aktif || '').split('').map((i) => HARI[i]?.slice(0, 3)).join(', ')}</td>
-  <td class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn putih kecil" data-edit="${k.id}">Ubah</button><button class="btn putih kecil" data-hapus="${k.id}">Hapus</button></td></tr>`).join('') || '<tr><td colspan="6" class="kosong">Belum ada kelompok</td></tr>'}
+  <td class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn putih kecil" data-edit="${k.id}">Ubah</button><button class="btn putih kecil" data-hapus="${k.id}">Hapus</button></td></tr>`).join('') || '<tr><td colspan="7" class="kosong">Belum ada kelompok</td></tr>'}
   </tbody></table></div></div>`);
   const form = (k = {}) => modal(`<h2>${k.id ? 'Ubah' : 'Tambah'} Kelompok</h2><form id="f-k">
     <div class="field"><label>Nama kelompok</label><input class="input" name="nama" value="${esc(k.nama || '')}" placeholder="mis. X-1 / Halaqah Al-Fatih" required></div>
@@ -1028,7 +1098,7 @@ async function viewPengguna() {
   });
   $('#tambah').onclick = () => formUser();
   $('#impor').onclick = () => modal(`<h2>Impor Pengguna dari CSV / Excel</h2>
-    <p class="small">Salin dari Excel/Spreadsheet (dengan baris judul) lalu tempel di bawah, atau pilih file .csv. Kolom yang dikenali:
+    <p class="small">Salin dari Excel/Spreadsheet (dengan baris judul) lalu tempel di bawah, atau pilih file .csv. Bisa ratusan baris sekaligus (dikirim bertahap otomatis). Kolom yang dikenali:
     <code>nama, username, password, kelompok, nis, jk, peran</code>. Hanya <b>nama</b> yang wajib — username dibuat otomatis, password acak, peran default <i>siswa</i>, kelompok baru otomatis dibuat.</p>
     <button class="btn putih kecil" id="contoh">⬇ Unduh contoh CSV</button>
     <div class="field" style="margin-top:10px"><input type="file" accept=".csv,.txt" id="file-csv" class="input"></div>
@@ -1050,12 +1120,24 @@ async function viewPengguna() {
         if (o.peran) o.peran = o.peran.toLowerCase();
         return o;
       });
-      $('#proses', m).disabled = true; $('#proses', m).textContent = 'Mengimpor ' + list.length + ' baris…';
-      try {
-        const r = await api('/users/import', { method: 'POST', body: { users: list } });
-        await viewPengguna();
-        tampilAkun(r.akun, `${r.berhasil} akun berhasil dibuat` + (r.gagal.length ? `, ${r.gagal.length} gagal` : ''), r.gagal);
-      } catch (e) { toast(e.message, true); $('#proses', m).disabled = false; $('#proses', m).textContent = 'Impor'; }
+      // dikirim bertahap (5 baris per permintaan) agar aman untuk batas Cloudflare paket gratis
+      const btn = $('#proses', m); btn.disabled = true;
+      const UKURAN = 5, akun = [], gagal = [];
+      for (let i = 0; i < list.length; i += UKURAN) {
+        const potong = list.slice(i, i + UKURAN);
+        btn.textContent = `Mengimpor ${Math.min(i + UKURAN, list.length)} / ${list.length}…`;
+        let r = null;
+        for (let coba = 0; coba < 3 && !r; coba++) {
+          try { r = await api('/users/import', { method: 'POST', body: { users: potong } }); }
+          catch (e) { if (coba === 2) potong.forEach((x, k) => gagal.push({ baris: i + k + 1, username: x.username, error: e.message })); else await new Promise((ok) => setTimeout(ok, 1500)); }
+        }
+        if (r) {
+          r.akun.forEach((x) => akun.push(x));
+          r.gagal.forEach((g) => gagal.push({ ...g, baris: i + g.baris }));
+        }
+      }
+      await viewPengguna();
+      tampilAkun(akun, `${akun.length} akun berhasil dibuat` + (gagal.length ? `, ${gagal.length} gagal` : ''), gagal);
     };
   });
 }
@@ -1118,7 +1200,8 @@ async function viewPengaturan() {
     <div class="grid g2" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
       <div class="field"><label>Status program</label><select class="input" name="owoj_aktif"><option value="1" ${p.owoj_aktif !== '0' ? 'selected' : ''}>Aktif</option><option value="0" ${p.owoj_aktif === '0' ? 'selected' : ''}>Nonaktif</option></select></div>
       <div class="field"><label>Pekan dimulai hari</label><select class="input" name="owoj_hari_mulai">${HARI.map((h, i) => `<option value="${i}" ${String(i) === String(p.owoj_hari_mulai ?? '1') ? 'selected' : ''}>${h}</option>`).join('')}</select></div>
-      <div class="field"><label>Pembagian juz dalam kelompok</label><select class="input" name="owoj_juz_unik"><option value="1" ${p.owoj_juz_unik !== '0' ? 'selected' : ''}>Satu juz untuk satu orang (target khatam bersama)</option><option value="0" ${p.owoj_juz_unik === '0' ? 'selected' : ''}>Satu juz boleh dipilih beberapa orang</option></select></div>
+      <div class="field"><label>Cakupan grup OWOJ</label><select class="input" name="owoj_cakupan"><option value="sekolah" ${p.owoj_cakupan !== 'kelompok' ? 'selected' : ''}>Satu sekolah/lembaga — semua murid & guru berbagi satu peta 30 juz</option><option value="kelompok" ${p.owoj_cakupan === 'kelompok' ? 'selected' : ''}>Per kelompok — tiap kelas punya peta 30 juz sendiri</option></select></div>
+      <div class="field"><label>Pembagian juz</label><select class="input" name="owoj_juz_unik"><option value="1" ${p.owoj_juz_unik !== '0' ? 'selected' : ''}>Satu juz untuk satu orang (target khatam bersama)</option><option value="0" ${p.owoj_juz_unik === '0' ? 'selected' : ''}>Satu juz boleh dipilih beberapa orang</option></select></div>
       <div class="field"><label>Poin per juz OWOJ tuntas</label><input class="input" type="number" min="0" name="owoj_poin" value="${esc(p.owoj_poin ?? 50)}"></div>
       <div class="field"><label>Halaman OWOJ ikut memenuhi target tadarus harian</label><select class="input" name="owoj_hitung_tadarus"><option value="1" ${p.owoj_hitung_tadarus !== '0' ? 'selected' : ''}>Ya (otomatis tercatat, kelebihan jadi tabungan)</option><option value="0" ${p.owoj_hitung_tadarus === '0' ? 'selected' : ''}>Tidak (terpisah)</option></select></div>
     </div>
@@ -1242,7 +1325,7 @@ async function viewOwoj() {
     <div class="owoj-hero">
       <div class="row spread"><div><div class="small" style="opacity:.85">${modeDepan ? 'Pekan depan' : pekanIni ? 'Pekan ini' : 'Pekan'}</div><b style="font-size:1.1rem">${rentangPekan(d)}</b></div>
         <div style="text-align:right">${pekanIni ? `<b style="font-size:1.6rem">${d.sisa_hari}</b><div class="tiny">hari lagi</div>` : ''}</div></div>
-      <div class="row spread" style="margin-top:14px"><span class="small">Khatam bersama ${esc(d.kelompok?.nama || '')}</span><b>${tuntasJuz.size}/30 juz tuntas</b></div>
+      <div class="row spread" style="margin-top:14px"><span class="small">Khatam bersama ${d.cakupan === 'sekolah' ? 'semua peserta' : esc(d.kelompok?.nama || '')}</span><b>${tuntasJuz.size}/30 juz tuntas</b></div>
       <div class="progress owoj-prog"><i style="width:${(tuntasJuz.size / 30) * 100}%"></i><s style="width:${(terambil.size / 30) * 100}%"></s></div>
       <div class="tiny" style="opacity:.85;margin-top:4px">${terambil.size} juz sudah dipilih · ${30 - terambil.size} juz belum ada yang membaca</div>
       ${tuntasJuz.size === 30 ? '<div class="alert sukses" style="margin:10px 0 0">🎉 Masya Allah! Kelompok ini khatam 30 juz bersama pekan ini.</div>' : ''}
@@ -1250,11 +1333,11 @@ async function viewOwoj() {
     </div>
     ${kartuSaya}
     <div class="card"><div class="row spread"><h3 style="margin:0">Peta Juz</h3>
-      <span class="tiny muted">${d.juz_unik ? 'Satu juz untuk satu orang' : 'Satu juz boleh dibaca beberapa orang'}</span></div>
+      <span class="tiny muted">${d.cakupan === 'sekolah' ? 'Satu peta untuk semua murid & guru' : 'Peta per kelompok'} · ${d.juz_unik ? 'satu juz untuk satu orang' : 'satu juz boleh beberapa orang'}</span></div>
       <div class="legend" style="margin:6px 0 10px"><span><i style="background:#fff;border:1px solid var(--garis)"></i>Tersedia</span><span><i style="background:var(--kuning-muda)"></i>Sedang dibaca</span><span><i style="background:var(--hijau-muda)"></i>Tuntas</span><span><i style="background:var(--hijau)"></i>Juz saya</span></div>
       <div class="juz-grid">${grid}</div></div>
     ${tabelGuru || (d.peta.length ? `<div class="card"><h3>Peserta ${modeDepan ? 'pekan depan' : 'pekan ini'} (${d.peta.length})</h3>
-      ${d.peta.map((x) => `<div class="row spread" style="padding:8px 0;border-bottom:1px solid #f0ede4"><div><b>${esc(x.nama)}</b> ${x.peran !== 'siswa' ? '<span class="badge biru">guru</span>' : ''}<div class="tiny muted">Juz ${x.juz}</div></div>
+      ${d.peta.map((x) => `<div class="row spread" style="padding:8px 0;border-bottom:1px solid #f0ede4"><div><b>${esc(x.nama)}</b> ${x.peran !== 'siswa' ? '<span class="badge biru">guru</span>' : ''}<div class="tiny muted">Juz ${x.juz}${d.cakupan === 'sekolah' && x.kelompok_nama ? ' · ' + esc(x.kelompok_nama) : ''}</div></div>
       <div style="width:120px;text-align:right">${statusPilihan(x)}<div class="bar-mini"><i style="width:${Math.round((x.dibaca / x.total) * 100)}%"></i></div></div></div>`).join('')}</div>` : '')}
     ${d.riwayat.length ? `<div class="card"><h3>Riwayat OWOJ ${guru ? 'saya' : ''}</h3><div class="tbl-wrap"><table class="tbl"><tbody>
       ${d.riwayat.map((r) => `<tr><td>${tglIndo(r.pekan, false)}</td><td>Juz ${r.juz}</td><td>${r.selesai_pada ? '<span class="badge hijau">Tuntas</span>' : r.pekan === d.pekan_ini ? `<span class="badge emas">${r.dibaca} hlm</span>` : `<span class="badge merah">Tidak tuntas (${r.dibaca} hlm)</span>`}</td></tr>`).join('')}
@@ -1395,10 +1478,38 @@ async function laporCetak(jenisAwal = 'tadarus') {
 window.laporCetak = laporCetak;
 
 // =========================================================
+//  GABUNG KELOMPOK DENGAN KODE
+// =========================================================
+async function viewGabung(kode) {
+  sessionStorage.removeItem('kode_gabung');
+  if (S.me.user.peran !== 'siswa') { shell(`<div class="card kosong">Tautan gabung hanya untuk akun murid/santri.<br><br><a class="btn" href="#/">Kembali</a></div>`); return; }
+  memuat();
+  let k;
+  try { k = await api('/gabung?kode=' + encodeURIComponent(kode)); }
+  catch (e) { shell(`<div class="card kosong">⚠️ ${esc(e.message)}<br><br><a class="btn" href="#/akun">Coba kode lain</a></div>`); return; }
+  shell(`<div class="card selebrasi" style="max-width:480px;margin:20px auto">
+    <div class="emo">👥</div><h2>Gabung kelompok ${esc(k.nama)}?</h2>
+    <p>Guru pembimbing: <b>${esc(k.guru_nama || '-')}</b><br>Target tadarus: <b>${k.target} halaman/hari</b></p>
+    ${k.sudah_anggota ? '<div class="alert sukses">Kamu sudah menjadi anggota kelompok ini.</div><a class="btn" href="#/">Ke beranda</a>' : `
+    ${S.me.kelompok ? `<div class="alert peringatan small">Kamu akan pindah dari kelompok <b>${esc(S.me.kelompok.nama)}</b>. Riwayat bacaan dan poinmu tetap tersimpan.</div>` : ''}
+    <div class="row" style="justify-content:center"><button class="btn" id="ya-gabung">Ya, gabung</button><a class="btn sec" href="#/">Batal</a></div>`}
+  </div>`);
+  const b = $('#ya-gabung');
+  if (b) b.onclick = async () => {
+    b.disabled = true;
+    const r = await coba(() => api('/gabung', { method: 'POST', body: { kode } }));
+    await muatSaya();
+    toast(`Alhamdulillah, kamu sudah bergabung di ${r.kelompok} ✓`);
+    location.hash = '#/';
+  };
+}
+
+// =========================================================
 //  ROUTER
 // =========================================================
 async function router() {
   const hash = location.hash || '#/';
+  if (hash.startsWith('#/gabung/')) sessionStorage.setItem('kode_gabung', decodeURIComponent(hash.slice(9)));
   if (!S.token) return viewLogin();
   try {
     if (!S.me) await muatSaya();
@@ -1410,6 +1521,7 @@ async function router() {
   const m = (re) => hash.match(re);
   let r;
   try {
+    if ((r = m(/^#\/gabung\/(.+)/))) return await viewGabung(decodeURIComponent(r[1]));
     if (hash === '#/akun') return viewAkun();
     if (hash === '#/owoj/baca') return await viewOwojBaca();
     if (hash === '#/owoj') return await viewOwoj();
@@ -1426,7 +1538,7 @@ async function router() {
       if (hash === '#/peringkat') return await viewPeringkat();
       return await viewBerandaSiswa();
     }
-    if ((r = m(/^#\/k\/(\d+)/))) return await viewKelompok(parseInt(r[1]));
+    if ((r = m(/^#\/k\/(\d+)(?:\/(\w+))?/))) return await viewKelompok(parseInt(r[1]), r[2] || 'rekap');
     if ((r = m(/^#\/s\/(\d+)/))) return await viewSiswaDetail(parseInt(r[1]));
     if (u.peran === 'admin') {
       if (hash === '#/kelompok') return await viewAdminKelompok();
