@@ -270,3 +270,23 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.88rem}
 .owoj-khatam small{opacity:.9}
 .putaran-badge{position:absolute;top:6px;right:8px;font-size:.66rem;font-weight:800;background:var(--emas);color:#3b2a06;border-radius:99px;padding:1px 6px}
 .juz-tile .cek{right:auto;left:auto;top:auto;bottom:6px;right:8px}
+
+/* ---------- ikon SVG menu ---------- */
+.bottomnav a .ik{display:block;width:24px;height:24px}
+.bottomnav a .ik svg,.sidenav a span svg,.tb-akun svg{width:100%;height:100%;display:block}
+.sidenav a span{width:20px;height:20px;flex:none;display:inline-block}
+.topbar .tb-akun{width:40px;height:40px;padding:9px}
+.topbar img{object-fit:contain}
+
+/* ---------- ajakan install ---------- */
+#ajak-install{position:fixed;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:80;background:#fff;border-radius:18px;box-shadow:0 12px 36px rgba(0,0,0,.25);
+  padding:12px;display:flex;gap:12px;align-items:center;border:1px solid #e8d7a8;animation:naik .35s ease;max-width:560px;margin:0 auto}
+#ajak-install img{width:48px;height:48px;border-radius:12px;flex:none}
+#ajak-install .ai-teks{flex:1;min-width:0;font-size:.82rem;line-height:1.35}
+#ajak-install .ai-teks b{display:block;font-size:.95rem}
+#ajak-install .ai-teks span{color:var(--abu)}
+#ajak-install .ai-tombol{display:flex;flex-direction:column;gap:6px}
+@media (min-width:900px){#ajak-install{bottom:20px;right:20px;left:auto;width:440px}}
+@keyframes naik{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
+.modal-box ol{padding-left:20px;line-height:1.7}
+.ik-share{display:inline-block;transform:rotate(-90deg)}

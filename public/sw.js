@@ -1,6 +1,6 @@
 // Service worker: cache aplikasi & halaman mushaf (bisa dibaca offline) + pengingat harian
-const VERSI = 'tadarus-v9';
-const SHELL = ['/', '/index.html', '/style.css?v=8', '/tajwid.js?v=8', '/app.js?v=8', '/manifest.json', '/icons/icon-192.png', '/quran/meta.json', '/fonts/scheherazade-new.woff2'];
+const VERSI = 'tadarus-v10';
+const SHELL = ['/', '/index.html', '/style.css?v=9', '/tajwid.js?v=9', '/app.js?v=9', '/manifest.json', '/icons/icon-192.png', '/icons/logo.png', '/quran/meta.json', '/fonts/scheherazade-new.woff2'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSI).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -46,7 +46,7 @@ async function cekDanIngatkan() {
     if (!s.selesai_hari_ini) {
       await self.registration.showNotification('Waktunya Tadarus 📖', {
         body: s.notif?.teks || `Hari ini wajib membaca ${s.sisa_hari_ini} halaman.`,
-        icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', tag: 'tadarus-harian', data: { url: '/#/baca' },
+        icon: '/icons/icon-192.png', '/icons/logo.png', badge: '/icons/icon-192.png', '/icons/logo.png', tag: 'tadarus-harian', data: { url: '/#/baca' },
       });
       await c.put('/__token', new Response(JSON.stringify({ token, terakhir: hariIni })));
     }

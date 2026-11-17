@@ -2,6 +2,7 @@
   "name": "Tadarus Al-Qur'an",
   "short_name": "Tadarus",
   "description": "Aplikasi tadarus rutin harian: target guru, hutang & tabungan halaman, poin.",
+  "id": "/",
   "start_url": "/#/",
   "scope": "/",
   "display": "standalone",

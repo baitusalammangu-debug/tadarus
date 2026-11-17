@@ -92,10 +92,26 @@ function juzDiHalaman(p) {
 }
 
 // ---------- kerangka tampilan ----------
+// ikon menu berupa SVG (emoji tertentu tidak tersedia di sebagian HP Android)
+const SVG = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const IK = {
+  beranda: SVG('<path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>'),
+  tadarus: SVG('<path d="M12 6.5C10 4.8 7 4.3 3.5 4.8v13c3.5-.5 6.5 0 8.5 1.7 2-1.7 5-2.2 8.5-1.7v-13C17 4.3 14 4.8 12 6.5z"/><path d="M12 6.5v13"/>'),
+  owoj: SVG('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M9 15l2 2 4-4"/>'),
+  mushaf: SVG('<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/><path d="M12 7l1 2 2 .3-1.5 1.4.4 2.1L12 11.8l-1.9 1 .4-2.1L9 9.3l2-.3z"/>'),
+  riwayat: SVG('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  peringkat: SVG('<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M16 5h3v2a3 3 0 0 1-3 3M8 5H5v2a3 3 0 0 0 3 3"/><path d="M12 13v4M8 21h8M9 17h6"/>'),
+  kelompok: SVG('<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14c2.8 0 5 2.2 5 5"/>'),
+  akun: SVG('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>'),
+  dasbor: SVG('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
+  pengguna: SVG('<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2.2"/><path d="M5.5 16c.6-1.8 2-2.6 3.5-2.6s2.9.8 3.5 2.6M14 10h4M14 13h3"/>'),
+  atur: SVG('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+  libur: SVG('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M10 14l4 4M14 14l-4 4"/>'),
+};
 const NAV = {
-  siswa: [['#/', '🏠', 'Beranda'], ['#/baca', '📖', 'Tadarus'], ['#/owoj', '🗓️', 'OWOJ'], ['#/mushaf', '🕮', 'Mushaf'], ['#/peringkat', '🏆', 'Peringkat'], ['#/riwayat', '📅', 'Riwayat']],
-  guru: [['#/', '👥', 'Kelompok'], ['#/saya', '📖', 'Tadarus Saya'], ['#/owoj', '🗓️', 'OWOJ'], ['#/mushaf', '🕮', 'Mushaf'], ['#/akun', '👤', 'Akun']],
-  admin: [['#/', '📊', 'Dasbor'], ['#/kelompok', '👥', 'Kelompok'], ['#/pengguna', '🪪', 'Pengguna'], ['#/owoj', '🗓️', 'OWOJ'], ['#/pengaturan', '⚙️', 'Atur'], ['#/libur', '📆', 'Libur'], ['#/mushaf', '🕮', 'Mushaf']],
+  siswa: [['#/', IK.beranda, 'Beranda'], ['#/baca', IK.tadarus, 'Tadarus'], ['#/owoj', IK.owoj, 'OWOJ'], ['#/mushaf', IK.mushaf, 'Mushaf'], ['#/peringkat', IK.peringkat, 'Peringkat'], ['#/riwayat', IK.riwayat, 'Riwayat']],
+  guru: [['#/', IK.kelompok, 'Kelompok'], ['#/saya', IK.tadarus, 'Tadarus Saya'], ['#/owoj', IK.owoj, 'OWOJ'], ['#/mushaf', IK.mushaf, 'Mushaf'], ['#/akun', IK.akun, 'Akun']],
+  admin: [['#/', IK.dasbor, 'Dasbor'], ['#/kelompok', IK.kelompok, 'Kelompok'], ['#/pengguna', IK.pengguna, 'Pengguna'], ['#/owoj', IK.owoj, 'OWOJ'], ['#/pengaturan', IK.atur, 'Atur'], ['#/libur', IK.libur, 'Libur'], ['#/mushaf', IK.mushaf, 'Mushaf']],
 };
 function shell(html) {
   const u = S.me.user;
@@ -105,13 +121,13 @@ function shell(html) {
   const aktif = (h) => (h === '#/' ? cur === '#/' || cur === '' : cur.startsWith(h)) ? 'aktif' : '';
   $('#app').innerHTML = `
   <header class="topbar">
-    <img src="${esc(p.logo || '/icons/icon-192.png')}" alt="">
+    <img src="${esc(p.logo || '/icons/logo.png')}" alt="">
     <div class="judul"><b>${esc(p.nama_lembaga || 'Tadarus')}</b><span>${esc(u.nama)} · ${u.peran === 'siswa' ? (S.me.kelompok ? esc(S.me.kelompok.nama) : 'Siswa') : u.peran === 'guru' ? 'Guru' : 'Admin'}</span></div>
-    <button onclick="location.hash='#/akun'" title="Akun">👤</button>
+    <button onclick="location.hash='#/akun'" title="Akun" class="tb-akun">${IK.akun}</button>
   </header>
   <div class="shell">
     <nav class="sidenav">${nav.filter(([h]) => h !== '#/akun').map(([h, i, l]) => `<a href="${h}" class="${aktif(h)}"><span>${i}</span>${l}</a>`).join('')}
-      <a href="#/akun" class="${aktif('#/akun')}"><span>👤</span>Akun</a></nav>
+      <a href="#/akun" class="${aktif('#/akun')}"><span>${IK.akun}</span>Akun</a></nav>
     <main class="wrap" id="main">${html}</main>
   </div>
   <nav class="bottomnav">${nav.slice(0, 5).map(([h, i, l]) => `<a href="${h}" class="${aktif(h)}"><span class="ik">${i}</span>${l}</a>`).join('')}</nav>`;
@@ -127,7 +143,7 @@ async function viewLogin() {
   const info = S.info || (S.info = await api('/info').catch(() => ({})));
   $('#app').innerHTML = `
   <div class="login"><form class="box" id="f-login">
-    <img class="logo" src="${esc(info.logo || '/icons/icon-192.png')}" alt="">
+    <img class="logo" src="${esc(info.logo || '/icons/logo.png')}" alt="">
     <h1 style="text-align:center;margin-bottom:2px">${esc(info.nama_lembaga || 'Tadarus Al-Qur\'an')}</h1>
     <p class="muted small" style="text-align:center;margin-top:0">${esc(info.sub_judul || 'Program Tadarus Rutin Harian')}</p>
     <div class="ayat">فَاقْرَءُوْا مَا تَيَسَّرَ مِنَ الْقُرْاٰنِۗ</div>
@@ -690,6 +706,7 @@ function viewAkun() {
   ${u.peran === 'siswa' ? `<div class="card row spread"><div><b>🔔 Pengingat harian</b><div class="small muted">${notifOk ? 'Aktif di perangkat ini.' : 'Belum aktif di perangkat ini.'}</div></div>
     ${notifOk ? '<button class="btn sec kecil" id="tes-notif">Tes notifikasi</button>' : '<button class="btn kecil" onclick="aktifkanNotif()">Aktifkan</button>'}</div>
     <div class="card small muted">💡 Tips: pasang aplikasi ini di layar utama HP (menu browser → <i>Tambahkan ke layar utama / Install app</i>) agar pengingat lebih andal dan mushaf bisa dibaca offline.</div>` : ''}
+  ${sudahTerpasang() ? '' : '<div class="card row spread"><div><b>📲 Pasang aplikasi di HP</b><div class="small muted">Buka Tadarus langsung dari layar utama, tanpa mengetik alamat.</div></div><button class="btn kecil" onclick="promptInstall ? (promptInstall.prompt()) : panduanInstall()">Pasang</button></div>'}
   <button class="btn merah blok" id="btn-keluar">Keluar</button>
   `);
   $('#f-pw').onsubmit = async (e) => {
@@ -1577,6 +1594,48 @@ async function router() {
 window.addEventListener('hashchange', router);
 window.aktifkanNotif = aktifkanNotif;
 window.router = router;
+
+// =========================================================
+//  AJAKAN INSTALL APLIKASI KE LAYAR UTAMA (PWA)
+// =========================================================
+let promptInstall = null;
+const sudahTerpasang = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const iOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const browserDalamAplikasi = () => /FBAN|FBAV|Instagram|Line\/|; wv\)|TikTok/i.test(navigator.userAgent);
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); promptInstall = e; tawarkanInstall(); });
+window.addEventListener('appinstalled', () => { promptInstall = null; $('#ajak-install')?.remove(); toast('Aplikasi Tadarus berhasil dipasang ✓'); });
+function tawarkanInstall(paksa = false) {
+  if (sudahTerpasang() || $('#ajak-install')) return;
+  const tolak = parseInt(localStorage.getItem('tolak_install') || '0');
+  if (!paksa && Date.now() - tolak < 2 * 864e5) return; // ditunda 2 hari bila memilih "Nanti"
+  const el = document.createElement('div');
+  el.id = 'ajak-install';
+  el.innerHTML = `<img src="/icons/icon-192.png" alt=""><div class="ai-teks"><b>Pasang aplikasi Tadarus</b><span>Agar mudah dibuka dari layar utama HP, dapat pengingat, dan mushaf bisa dibaca offline.</span></div>
+    <div class="ai-tombol"><button class="btn kecil emas" id="ai-pasang">Pasang</button><button class="btn kecil putih" id="ai-nanti">Nanti</button></div>`;
+  document.body.appendChild(el);
+  $('#ai-nanti').onclick = () => { localStorage.setItem('tolak_install', Date.now()); el.remove(); };
+  $('#ai-pasang').onclick = async () => {
+    if (promptInstall) {
+      promptInstall.prompt();
+      const r = await promptInstall.userChoice.catch(() => null);
+      promptInstall = null;
+      if (r && r.outcome === 'accepted') el.remove();
+      return;
+    }
+    panduanInstall();
+  };
+}
+function panduanInstall() {
+  const langkah = iOS()
+    ? `<ol><li>Buka alamat ini di <b>Safari</b>.</li><li>Ketuk tombol <b>Bagikan</b> <span class="ik-share">⎋</span> (kotak dengan panah ke atas) di bagian bawah.</li><li>Pilih <b>Tambahkan ke Layar Utama</b> (Add to Home Screen), lalu ketuk <b>Tambah</b>.</li></ol>`
+    : browserDalamAplikasi()
+      ? `<ol><li>Halaman ini terbuka di dalam aplikasi lain (WhatsApp/Instagram/Facebook).</li><li>Ketuk menu <b>⋮</b> lalu pilih <b>Buka di Chrome</b> / <b>Open in browser</b>.</li><li>Di Chrome, ketuk <b>⋮ → Instal aplikasi</b> / <b>Tambahkan ke layar utama</b>.</li></ol>`
+      : `<ol><li>Ketuk menu <b>⋮</b> di pojok kanan atas Chrome.</li><li>Pilih <b>Instal aplikasi</b> atau <b>Tambahkan ke layar utama</b>.</li><li>Ketuk <b>Instal</b>. Ikon Tadarus akan muncul di layar utama HP.</li></ol><p class="small muted">Di komputer: klik ikon <b>Instal</b> ⊕ di ujung kanan kolom alamat Chrome/Edge.</p>`;
+  modal(`<div style="text-align:center"><img src="/icons/icon-192.png" style="width:72px;border-radius:16px" alt=""><h2 style="margin:8px 0 4px">Pasang aplikasi Tadarus</h2></div>${langkah}<button class="btn blok" data-tutup>Mengerti</button>`);
+}
+window.tawarkanInstall = tawarkanInstall;
+window.panduanInstall = panduanInstall;
+setTimeout(() => tawarkanInstall(), 2500); // juga untuk iPhone & browser tanpa event beforeinstallprompt
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready).then((reg) => {
