@@ -691,7 +691,7 @@ function viewAkun() {
   ${wajibGanti ? '<div class="alert peringatan">🔐 Demi keamanan, silakan ganti password bawaan Anda terlebih dahulu.</div>' : ''}
   <div class="card">
     <div class="row"><div style="width:54px;height:54px;border-radius:16px;background:var(--hijau-muda);display:grid;place-items:center;font-size:1.6rem">👤</div>
-    <div><b style="font-size:1.1rem">${esc(u.nama)}</b><div class="small muted">@${esc(u.username)} · ${u.peran}${S.me.kelompok ? ' · ' + esc(S.me.kelompok.nama) : ''}${S.me.kelompok?.guru_nama ? ' · Guru: ' + esc(S.me.kelompok.guru_nama) : ''}</div></div></div>
+    <div><b style="font-size:1.1rem">${esc(u.nama)}</b><div class="small muted">@${esc(u.username)} · ${u.peran}${S.me.kelompok ? ' · ' + esc(S.me.kelompok.nama) : ''}${S.me.kelompok?.guru_nama ? ' · Wali kelas: ' + esc(S.me.kelompok.guru_nama) : ''}${S.me.kelompok?.guru2_nama ? ' · Guru Agama: ' + esc(S.me.kelompok.guru2_nama) : ''}</div></div></div>
   </div>
   <div class="card"><h3>Ganti Password</h3>
     <form id="f-pw">
@@ -738,12 +738,14 @@ async function viewDaftarKelompok() {
     <a class="card row spread" href="#/saya" style="color:inherit;border-left:5px solid ${st.selesai_hari_ini ? 'var(--hijau)' : st.hutang ? 'var(--merah)' : 'var(--emas)'}">
       <div><b>📖 Tadarus saya hari ini</b><div class="small muted">${st.selesai_hari_ini ? `Tuntas ✓ · dibaca ${st.dibaca_hari_ini} halaman` : `Wajib ${st.sisa_hari_ini} halaman lagi${st.hutang ? ` (termasuk hutang ${st.hutang})` : ''}`} · ⭐ ${st.poin} poin</div></div>
       <span class="btn kecil ${st.selesai_hari_ini ? 'sec' : 'emas'}">${st.selesai_hari_ini ? 'Lihat' : 'Baca'}</span></a>` : '';
-  shell(`${kartu}<div class="row spread"><h1 style="margin:0">Kelompok Tadarus</h1><button class="btn" onclick="formKelompokBaru()">+ Buat Kelompok</button></div>
+  shell(`${kartu}<div class="row spread"><h1 style="margin:0">Kelompok Tadarus</h1><div class="row" style="gap:6px">${S.me.user.guru_agama ? '<button class="btn emas" onclick="aturDampingan()">🕌 Atur kelompok dampingan</button>' : ''}<button class="btn" onclick="formKelompokBaru()">+ Buat Kelompok</button></div></div>
+  ${S.me.user.guru_agama ? '<div class="alert info small"><span>🕌 Anda terdaftar sebagai <b>Guru Agama</b>. Ketuk <b>Atur kelompok dampingan</b> untuk memilih kelas yang Anda dampingi bersama wali kelas.</span></div>' : ''}
   <p class="small muted">Buat kelompok/halaqah sendiri lalu bagikan <b>kode gabung</b> kepada murid. Murid memasukkan kode di menu Akun.</p>
   ${data.length ? `<div class="grid g3" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))">${data.map((k) => `
     <a class="card kelompok-card" href="#/k/${k.id}">
       <div class="row spread"><b style="font-size:1.05rem">${esc(k.nama)}</b><span class="badge hijau">${k.jumlah_siswa} siswa</span></div>
-      <div class="small muted" style="margin-top:6px">🎯 ${k.target ?? 0} halaman/hari · 👤 ${esc(k.guru_nama || 'Belum ada guru')}</div>
+      <div class="small muted" style="margin-top:6px">🎯 ${k.target ?? 0} halaman/hari · <span class="badge ${k.guru_id === S.me.user.id ? 'hijau' : 'emas'}">${k.guru_id === S.me.user.id ? 'Wali kelas' : 'Guru Agama'}</span></div>
+      <div class="tiny muted" style="margin-top:4px">${teksPendamping(k)}</div>
       <div class="kode-mini">🔑 ${esc(k.kode || '-')}${k.kode_aktif === 0 ? ' <span class="badge">nonaktif</span>' : ''}</div>
     </a>`).join('')}</div>` : '<div class="card kosong">Belum ada kelompok. Klik <b>+ Buat Kelompok</b> untuk membuat kelompok dan mendapatkan kode gabung.</div>'}`);
 }
@@ -768,12 +770,52 @@ function formKelompokBaru() {
 }
 window.formKelompokBaru = formKelompokBaru;
 
+// ---------- guru agama: pilih kelompok dampingan (oleh guru agama sendiri atau admin) ----------
+async function aturDampingan(olehAdmin = false) {
+  const d = await coba(() => api('/dampingan'));
+  if (olehAdmin && !d.guru_agama.length) {
+    modal(`<h2>Tetapkan Guru Agama</h2><p>Belum ada guru yang ditandai sebagai <b>Guru Agama</b>.</p><p class="small muted">Buka menu <b>Pengguna</b> → klik <b>Ubah</b> pada nama guru → centang <b>Guru Agama</b> → Simpan.</p><a class="btn" href="#/pengguna" data-tutup>Ke menu Pengguna</a>`);
+    return;
+  }
+  const saya = S.me.user.id;
+  const isi = (gid) => d.kelompok.map((k) => {
+    const milik = k.guru2_id === gid, lain = k.guru2_id && k.guru2_id !== gid, wali = k.guru_id === gid;
+    return `<label class="dmp-row ${milik ? 'on' : ''}"><input type="checkbox" value="${k.id}" ${milik ? 'checked' : ''} ${wali || (lain && !olehAdmin) ? 'disabled' : ''}>
+      <span><b>${esc(k.nama)}</b> <span class="tiny muted">· ${k.jumlah_siswa} siswa</span><br><span class="tiny muted">Wali kelas: ${esc(k.guru_nama || '-')}${lain ? ` · Guru Agama: <b>${esc(k.guru2_nama)}</b>${olehAdmin ? ' (akan diganti)' : ''}` : ''}${wali ? ' · (wali kelas)' : ''}</span></span></label>`;
+  }).join('');
+  modal(`<h2>🕌 ${olehAdmin ? 'Tetapkan Guru Agama ke Kelompok' : 'Kelompok dampingan saya'}</h2>
+    ${olehAdmin ? `<div class="field"><label>Guru Agama</label><select class="input" id="dmp-guru">${d.guru_agama.map((g) => `<option value="${g.id}">${esc(g.nama)}</option>`).join('')}</select></div>` : ''}
+    <p class="small muted">Centang kelompok yang didampingi sebagai <b>pendamping ke-2 (Guru Agama)</b>. Hapus centang untuk melepas.</p>
+    <div class="row" style="gap:6px;margin-bottom:8px"><button type="button" class="btn putih kecil" id="dmp-semua">Pilih semua yang kosong</button><input class="input" id="dmp-cari" placeholder="Cari kelas…" style="flex:1;min-width:120px;padding:7px 10px"></div>
+    <div id="dmp-list" class="dmp-list"></div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="dmp-simpan">Simpan</button><button class="btn sec" data-tutup>Batal</button></div>`, (m) => {
+    const gid = () => (olehAdmin ? +$('#dmp-guru', m).value : saya);
+    let awal = new Set();
+    const render = () => { $('#dmp-list', m).innerHTML = isi(gid()); awal = new Set(d.kelompok.filter((k) => k.guru2_id === gid()).map((k) => k.id)); cari(); };
+    const cari = () => { const q = $('#dmp-cari', m).value.toLowerCase(); $$('.dmp-row', m).forEach((r) => (r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none')); };
+    render();
+    if (olehAdmin) $('#dmp-guru', m).onchange = render;
+    $('#dmp-cari', m).oninput = cari;
+    $('#dmp-semua', m).onclick = () => $$('#dmp-list input:not(:disabled)', m).forEach((c) => { const k = d.kelompok.find((x) => x.id === +c.value); if (!k.guru2_id) c.checked = true; });
+    $('#dmp-simpan', m).onclick = async () => {
+      const dipilih = new Set($$('#dmp-list input:checked', m).map((c) => +c.value));
+      const pasang = [...dipilih].filter((x) => !awal.has(x)), lepas = [...awal].filter((x) => !dipilih.has(x));
+      const r = await coba(() => api('/dampingan', { method: 'POST', body: { guru_id: gid(), pasang, lepas } }));
+      tutupModal();
+      toast(r.gagal.length ? `Sebagian tidak diproses: ${r.gagal.join('; ')}` : 'Kelompok dampingan disimpan ✓', !!r.gagal.length);
+      router();
+    };
+  });
+}
+window.aturDampingan = aturDampingan;
+
 function tautanGabung(kode) { return `${location.origin}/#/gabung/${encodeURIComponent(kode)}`; }
 function bagikanKode(k) {
   const teks = `Assalamu'alaikum. Ayo bergabung di kelompok tadarus *${k.nama}*.\n\n1. Buka ${location.origin}\n2. Login dengan akun masing-masing\n3. Masuk menu Akun → Gabung Kelompok, masukkan kode: *${k.kode}*\n\nAtau langsung klik: ${tautanGabung(k.kode)}`;
   return teks;
 }
 
+const teksPendamping = (k) => `Wali kelas: ${esc(k.guru_nama || '-')}${k.guru2_nama ? ` · Guru Agama: ${esc(k.guru2_nama)}` : ''}`;
 const STATUS_BADGE = (s) => s.selesai_hari_ini
   ? (s.terjadwal_hari_ini || s.dibaca_hari_ini ? '<span class="badge hijau">Tuntas</span>' : '<span class="badge biru">Libur</span>')
   : s.dibaca_hari_ini ? '<span class="badge emas">Sebagian</span>' : '<span class="badge merah">Belum</span>';
@@ -789,7 +831,7 @@ async function viewKelompok(id, tab = 'rekap') {
   const targetNow = d.jadwal.find((j) => j.kelompok_id && !j.siswa_id && j.mulai <= d.hari_ini);
   const main = shell(`
   <div class="row spread"><div><a class="small" href="#/${S.me.user.peran === 'admin' ? 'kelompok' : ''}">← Kembali</a><h1 style="margin:4px 0 0">${esc(k.nama)}</h1>
-  <div class="small muted">Guru: ${esc(k.guru_nama || '-')} · 🎯 ${targetNow?.halaman_per_hari ?? 0} hlm/hari · ${tglIndo(d.hari_ini)}</div></div></div>
+  <div class="small muted">${teksPendamping(k)} · 🎯 ${targetNow?.halaman_per_hari ?? 0} hlm/hari · ${tglIndo(d.hari_ini)}</div></div></div>
   <div class="grid g4" style="margin:14px 0">
     <div class="stat"><div class="n">${sis.length}</div><div class="l">Siswa</div></div>
     <div class="stat hijau"><div class="n">${selesai}</div><div class="l">Tuntas hari ini</div></div>
@@ -1003,7 +1045,7 @@ async function viewDasborAdmin() {
   </div>
   ${d.siswa === 0 ? `<div class="alert info">👋 Mulai dengan: (1) buat akun guru di menu <a href="#/pengguna">Pengguna</a>, (2) buat <a href="#/kelompok">Kelompok</a> beserta target halaman/hari, (3) impor/tambah akun siswa ke kelompok.</div>` : ''}
   <h2>Kelompok</h2>
-  <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))">${kel.map((k) => `<a class="card kelompok-card" href="#/k/${k.id}"><div class="row spread"><b>${esc(k.nama)}</b><span class="badge hijau">${k.jumlah_siswa} siswa</span></div><div class="small muted" style="margin-top:6px">🎯 ${k.target ?? 0} hlm/hari · ${esc(k.guru_nama || 'tanpa guru')}</div></a>`).join('') || '<div class="card kosong">Belum ada kelompok</div>'}</div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))">${kel.map((k) => `<a class="card kelompok-card" href="#/k/${k.id}"><div class="row spread"><b>${esc(k.nama)}</b><span class="badge hijau">${k.jumlah_siswa} siswa</span></div><div class="small muted" style="margin-top:6px">🎯 ${k.target ?? 0} hlm/hari</div><div class="tiny muted">${teksPendamping(k)}</div></a>`).join('') || '<div class="card kosong">Belum ada kelompok</div>'}</div>
   <h2 style="margin-top:20px">Tadarus Guru</h2>
   <div class="card">${gt.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nama</th><th>Hari ini</th><th>Hutang</th><th>Tabungan</th><th>Poin</th><th>7 hari</th></tr></thead><tbody>
     ${gt.map((g) => `<tr><td><b>${esc(g.nama)}</b></td><td>${STATUS_BADGE(g)}<div class="tiny muted">${g.dibaca_hari_ini}/${g.dibaca_hari_ini + g.sisa_hari_ini} hlm</div></td><td>${g.hutang ? `<b style="color:var(--merah)">${g.hutang}</b>` : 0}</td><td>${g.spare}</td><td><b>${g.poin}</b></td>
@@ -1015,16 +1057,18 @@ async function viewAdminKelompok() {
   memuat();
   const [kel, guru] = await Promise.all([api('/kelompok'), api('/users?peran=guru')]);
   const p = S.me.pengaturan;
-  shell(`<div class="row spread"><h1 style="margin:0">Kelompok</h1><button class="btn" id="tambah">+ Kelompok</button></div>
-  <p class="small muted">Kelompok = kelas/halaqah. Setiap kelompok punya guru pembimbing, target halaman per hari dan hari aktif.</p>
-  <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nama</th><th>Kode gabung</th><th>Guru</th><th>Siswa</th><th>Target</th><th>Hari aktif</th><th></th></tr></thead><tbody>
-  ${kel.map((k) => `<tr><td><a href="#/k/${k.id}"><b>${esc(k.nama)}</b></a></td><td><a href="#/k/${k.id}/anggota"><code>${esc(k.kode || '-')}</code></a></td><td>${esc(k.guru_nama || '-')}</td><td>${k.jumlah_siswa}</td><td>${k.target ?? 0} hlm/hari</td>
+  shell(`<div class="row spread"><h1 style="margin:0">Kelompok</h1><div class="row" style="gap:6px"><button class="btn emas" id="atur-ga">🕌 Tetapkan Guru Agama</button><button class="btn" id="tambah">+ Kelompok</button></div></div>
+  <p class="small muted">Kelompok = kelas/halaqah. Setiap kelompok punya 2 pendamping: <b>wali kelas</b> dan <b>guru agama</b>, target halaman per hari, dan hari aktif.</p>
+  <div class="card"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nama</th><th>Kode gabung</th><th>Wali kelas</th><th>Guru Agama</th><th>Siswa</th><th>Target</th><th>Hari aktif</th><th></th></tr></thead><tbody>
+  ${kel.map((k) => `<tr><td><a href="#/k/${k.id}"><b>${esc(k.nama)}</b></a></td><td><a href="#/k/${k.id}/anggota"><code>${esc(k.kode || '-')}</code></a></td><td>${esc(k.guru_nama || '-')}</td><td>${k.guru2_nama ? esc(k.guru2_nama) : '<span class="muted">-</span>'}</td><td>${k.jumlah_siswa}</td><td>${k.target ?? 0} hlm/hari</td>
   <td class="small">${(k.hari_aktif || '').split('').map((i) => HARI[i]?.slice(0, 3)).join(', ')}</td>
-  <td class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn putih kecil" data-edit="${k.id}">Ubah</button><button class="btn putih kecil" data-hapus="${k.id}">Hapus</button></td></tr>`).join('') || '<tr><td colspan="7" class="kosong">Belum ada kelompok</td></tr>'}
+  <td class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn putih kecil" data-edit="${k.id}">Ubah</button><button class="btn putih kecil" data-hapus="${k.id}">Hapus</button></td></tr>`).join('') || '<tr><td colspan="8" class="kosong">Belum ada kelompok</td></tr>'}
   </tbody></table></div></div>`);
   const form = (k = {}) => modal(`<h2>${k.id ? 'Ubah' : 'Tambah'} Kelompok</h2><form id="f-k">
     <div class="field"><label>Nama kelompok</label><input class="input" name="nama" value="${esc(k.nama || '')}" placeholder="mis. X-1 / Halaqah Al-Fatih" required></div>
-    <div class="field"><label>Guru pembimbing</label><select class="input" name="guru_id"><option value="">— pilih —</option>${guru.map((g) => `<option value="${g.id}" ${g.id === k.guru_id ? 'selected' : ''}>${esc(g.nama)}</option>`).join('')}</select></div>
+    <div class="grid g2"><div class="field"><label>Pendamping 1 – Wali kelas</label><select class="input" name="guru_id"><option value="">— pilih —</option>${guru.map((g) => `<option value="${g.id}" ${g.id === k.guru_id ? 'selected' : ''}>${esc(g.nama)}</option>`).join('')}</select></div>
+    <div class="field"><label>Pendamping 2 – Guru Agama</label><select class="input" name="guru2_id"><option value="">— pilih —</option>${guru.filter((g) => g.guru_agama).map((g) => `<option value="${g.id}" ${g.id === k.guru2_id ? 'selected' : ''}>${esc(g.nama)}</option>`).join('')}</select>
+      ${guru.some((g) => g.guru_agama) ? '' : '<div class="tiny muted">Belum ada guru yang ditandai Guru Agama. Tandai di menu Pengguna → Ubah.</div>'}</div></div>
     ${k.id ? '' : `<div class="grid g2"><div class="field"><label>Target halaman/hari</label><input class="input" type="number" name="halaman_per_hari" min="0" max="604" value="${p.default_halaman_per_hari || 2}"></div>
     <div class="field"><label>Mulai program</label><input class="input" type="date" name="tgl_mulai" value="${hariIni()}"></div></div>`}
     <div class="field"><label>Hari wajib tadarus</label><div class="chip-hari">${HARI.map((h, i) => `<label><input type="checkbox" name="h" value="${i}" ${(k.hari_aktif ?? '0123456').includes(String(i)) ? 'checked' : ''}> ${h.slice(0, 3)}</label>`).join('')}</div></div>
@@ -1035,12 +1079,14 @@ async function viewAdminKelompok() {
       const body = { ...Object.fromEntries(fd), hari_aktif: fd.getAll('h').join('') };
       delete body.h;
       body.guru_id = body.guru_id ? parseInt(body.guru_id) : null;
+      body.guru2_id = body.guru2_id ? parseInt(body.guru2_id) : null;
       if (k.id) await coba(() => api('/kelompok/' + k.id, { method: 'PUT', body }), 'Disimpan');
       else await coba(() => api('/kelompok', { method: 'POST', body }), 'Kelompok dibuat');
       tutupModal(); viewAdminKelompok();
     };
   });
   $('#tambah').onclick = () => form();
+  $('#atur-ga').onclick = () => aturDampingan(true);
   $$('[data-edit]').forEach((b) => (b.onclick = () => form(kel.find((k) => k.id == b.dataset.edit))));
   $$('[data-hapus]').forEach((b) => (b.onclick = async () => { if (!confirm('Hapus kelompok ini?')) return; await coba(() => api('/kelompok/' + b.dataset.hapus, { method: 'DELETE' }), 'Dihapus'); viewAdminKelompok(); }));
 }
@@ -1064,7 +1110,7 @@ async function viewPengguna() {
     const rows = users.filter((u) => (!p || u.peran === p) && (!k || String(u.kelompok_id) === k) && (!q || u.nama.toLowerCase().includes(q) || u.username.includes(q)));
     $('#jml').textContent = rows.length + ' pengguna';
     $('#tb').innerHTML = rows.map((u) => `<tr><td><b>${esc(u.nama)}</b>${u.nis ? `<div class="tiny muted">NIS ${esc(u.nis)}</div>` : ''}</td><td>${esc(u.username)}</td>
-      <td><span class="badge ${u.peran === 'admin' ? 'merah' : u.peran === 'guru' ? 'biru' : 'hijau'}">${u.peran}</span></td><td>${esc(u.kelompok_nama || '-')}</td>
+      <td><span class="badge ${u.peran === 'admin' ? 'merah' : u.peran === 'guru' ? 'biru' : 'hijau'}">${u.peran}</span>${u.guru_agama ? ' <span class="badge emas">Guru Agama</span>' : ''}</td><td>${esc(u.kelompok_nama || '-')}</td>
       <td>${u.aktif ? '<span class="badge hijau">aktif</span>' : '<span class="badge">nonaktif</span>'}${u.wajib_ganti_pw ? ' <span class="badge emas" title="Belum mengganti password bawaan">pw awal</span>' : ''}</td>
       <td class="row" style="gap:4px;flex-wrap:nowrap"><button class="btn putih kecil" data-edit="${u.id}">Ubah</button><button class="btn putih kecil" data-reset="${u.id}">Reset PW</button><button class="btn putih kecil" data-hapus="${u.id}">Hapus</button></td></tr>`).join('') || '<tr><td colspan="6" class="kosong">Tidak ada data</td></tr>';
     $$('[data-edit]').forEach((b) => (b.onclick = () => formUser(users.find((x) => x.id == b.dataset.edit))));
@@ -1092,10 +1138,11 @@ async function viewPengguna() {
     <div class="field"><label>${u.id ? 'Password baru (kosongkan bila tetap)' : 'Password (kosong = acak)'}</label><input class="input" name="password"></div></div>
     <div class="grid g2"><div class="field"><label>NIS / No. Induk</label><input class="input" name="nis" value="${esc(u.nis || '')}"></div>
     <div class="field"><label>L/P</label><select class="input" name="jk"><option value="">—</option><option ${u.jk === 'L' ? 'selected' : ''}>L</option><option ${u.jk === 'P' ? 'selected' : ''}>P</option></select></div></div>
+    <label class="row small" id="fld-ga" style="gap:6px;margin-bottom:8px"><input type="checkbox" name="guru_agama" ${u.guru_agama ? 'checked' : ''}> <span><b>Guru Agama</b> — dapat menjadi pendamping ke-2 di kelompok-kelompok (bersama wali kelas)</span></label>
     ${u.id ? `<label class="row small"><input type="checkbox" name="aktif" ${u.aktif ? 'checked' : ''}> Akun aktif</label><br>` : ''}
     <div class="row"><button class="btn">Simpan</button><button type="button" class="btn sec" data-tutup>Batal</button></div></form>`, (m) => {
     const f = $('#f-u', m);
-    const togel = () => $('#fld-kel', m).style.visibility = f.peran.value === 'siswa' ? 'visible' : 'hidden';
+    const togel = () => { $('#fld-kel', m).style.visibility = f.peran.value === 'siswa' ? 'visible' : 'hidden'; $('#fld-ga', m).style.display = f.peran.value === 'guru' ? 'flex' : 'none'; };
     f.peran.onchange = togel; togel();
     if (!u.id) f.nama.oninput = () => { if (!f.username._ubah) f.username.value = buatUsername(f.nama.value, f.nis.value); };
     f.username.oninput = () => (f.username._ubah = true);
@@ -1103,6 +1150,7 @@ async function viewPengguna() {
       e.preventDefault();
       const body = Object.fromEntries(new FormData(f));
       body.kelompok_id = body.kelompok_id ? parseInt(body.kelompok_id) : null;
+      body.guru_agama = f.guru_agama.checked ? 1 : 0;
       if (u.id) {
         body.aktif = f.aktif.checked ? 1 : 0;
         if (!body.password) delete body.password;
@@ -1527,7 +1575,7 @@ async function viewGabung(kode) {
   catch (e) { shell(`<div class="card kosong">⚠️ ${esc(e.message)}<br><br><a class="btn" href="#/akun">Coba kode lain</a></div>`); return; }
   shell(`<div class="card selebrasi" style="max-width:480px;margin:20px auto">
     <div class="emo">👥</div><h2>Gabung kelompok ${esc(k.nama)}?</h2>
-    <p>Guru pembimbing: <b>${esc(k.guru_nama || '-')}</b><br>Target tadarus: <b>${k.target} halaman/hari</b></p>
+    <p>Wali kelas: <b>${esc(k.guru_nama || '-')}</b>${k.guru2_nama ? `<br>Guru Agama: <b>${esc(k.guru2_nama)}</b>` : ''}<br>Target tadarus: <b>${k.target} halaman/hari</b></p>
     ${k.sudah_anggota ? '<div class="alert sukses">Kamu sudah menjadi anggota kelompok ini.</div><a class="btn" href="#/">Ke beranda</a>' : `
     ${S.me.kelompok ? `<div class="alert peringatan small">Kamu akan pindah dari kelompok <b>${esc(S.me.kelompok.nama)}</b>. Riwayat bacaan dan poinmu tetap tersimpan.</div>` : ''}
     <div class="row" style="justify-content:center"><button class="btn" id="ya-gabung">Ya, gabung</button><a class="btn sec" href="#/">Batal</a></div>`}

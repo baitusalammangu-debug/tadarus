@@ -46,6 +46,8 @@ Berjalan di **Cloudflare Pages + D1** (gratis), kode disimpan di **GitHub**.
 1. **Admin**: menu Pengguna → Ubah → pilih Kelompok (atau lewat impor CSV).
 2. **Guru**: menu Kelompok → **+ Buat Kelompok** → dapat **kode gabung** (mis. `BAITIJ-6BAJ`). Bagikan kode/tautan (bisa langsung via WhatsApp). Murid memasukkan kode di **Akun → Gabung Kelompok** atau membuka tautan gabung. Guru bisa membuat kode baru, menonaktifkan kode, mengeluarkan anggota, mengganti nama, dan menghapus kelompok kosong.
 
+**Dua pendamping per kelompok** — setiap kelompok bisa punya **Wali Kelas** (pendamping 1) dan **Guru Agama** (pendamping 2). Admin menandai guru sebagai *Guru Agama* di menu Pengguna (atau kolom `guru_agama` = ya saat impor), lalu menetapkannya ke banyak kelompok sekaligus lewat **Kelompok → Tetapkan Guru Agama**. Guru Agama juga bisa memilih sendiri kelompok dampingannya lewat tombol **Atur kelompok dampingan**. Kedua pendamping sama-sama bisa memantau rekap, mengatur target, menyetor bacaan, dan mengirim pengumuman; hanya wali kelas/admin yang bisa menghapus kelompok.
+
 **Guru**: rekap kelompok (tuntas/belum, hutang, tabungan, poin, posisi halaman, 7 hari terakhir), unduh CSV/cetak, atur target, hari aktif, jeda minimal per halaman, hari libur, pengumuman, peringkat, detail siswa (setor bacaan manual, target khusus, titik mulai).
 
 **Admin**: dasbor, kelompok, pengguna (tambah, ubah, reset password, nonaktifkan, **impor CSV/Excel massal** + cetak kartu akun), libur global, pengaturan (nama lembaga, logo, poin).

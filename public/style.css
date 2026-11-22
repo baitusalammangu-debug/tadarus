@@ -290,3 +290,10 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.88rem}
 @keyframes naik{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
 .modal-box ol{padding-left:20px;line-height:1.7}
 .ik-share{display:inline-block;transform:rotate(-90deg)}
+
+/* ---------- kelompok dampingan guru agama ---------- */
+.dmp-list{max-height:52vh;overflow:auto;border:1px solid var(--garis);border-radius:12px}
+.dmp-row{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border-bottom:1px solid #f0ede4;cursor:pointer}
+.dmp-row:last-child{border-bottom:0}
+.dmp-row.on{background:var(--hijau-muda)}
+.dmp-row input{margin-top:4px;accent-color:var(--hijau)}

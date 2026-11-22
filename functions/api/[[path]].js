@@ -252,8 +252,9 @@ const wajibPeran = (u, ...peran) => {
 // guru hanya boleh mengelola kelompok miliknya
 async function cekAksesKelompok(db, u, kelompokId) {
   if (u.peran === 'admin') return true;
-  const k = await db.prepare('SELECT guru_id FROM kelompok WHERE id = ?').bind(kelompokId).first();
-  if (!k || k.guru_id !== u.id) throw new HttpError('Kelompok ini bukan milik Anda', 403);
+  const k = await db.prepare('SELECT guru_id, guru2_id FROM kelompok WHERE id = ?').bind(kelompokId).first();
+  // pendamping kelompok: wali kelas (guru_id) atau guru agama (guru2_id)
+  if (!k || (k.guru_id !== u.id && k.guru2_id !== u.id)) throw new HttpError('Anda bukan pendamping kelompok ini', 403);
   return true;
 }
 async function cekAksesSiswa(db, u, siswaId) {
@@ -295,6 +296,8 @@ const MIGRASI = [
   "ALTER TABLE kelompok ADD COLUMN kode_aktif INTEGER DEFAULT 1",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_kelompok_kode ON kelompok(kode)",
   "ALTER TABLE owoj_pilihan ADD COLUMN putaran INTEGER DEFAULT 1",
+  "ALTER TABLE kelompok ADD COLUMN guru2_id INTEGER",
+  "ALTER TABLE users ADD COLUMN guru_agama INTEGER DEFAULT 0",
   "INSERT OR IGNORE INTO pengaturan (kunci, nilai) VALUES ('owoj_maks_juz','5')",
 ];
 async function pastikanSkema(db) {
@@ -380,7 +383,7 @@ const HANDLER = {
     if (!u) throw new HttpError('Sesi berakhir, silakan login lagi', 401);
     const p = await ambilPengaturan(db);
     let kelompok = null;
-    if (u.kelompok_id) kelompok = await db.prepare('SELECT k.*, g.nama AS guru_nama FROM kelompok k LEFT JOIN users g ON g.id = k.guru_id WHERE k.id = ?').bind(u.kelompok_id).first();
+    if (u.kelompok_id) kelompok = await db.prepare('SELECT k.*, g.nama AS guru_nama, g2.nama AS guru2_nama FROM kelompok k LEFT JOIN users g ON g.id = k.guru_id LEFT JOIN users g2 ON g2.id = k.guru2_id WHERE k.id = ?').bind(u.kelompok_id).first();
     const { _token, ...user } = u;
     return json({ user, kelompok, pengaturan: p, hari_ini: hariIniWIB() });
   },
@@ -452,11 +455,11 @@ const HANDLER = {
   // ---------- GURU & ADMIN ----------
   'GET /kelompok': async ({ db, u }) => {
     wajibPeran(u, 'admin', 'guru');
-    const where = u.peran === 'guru' ? 'WHERE k.guru_id = ?' : '';
-    const st = db.prepare(`SELECT k.*, g.nama AS guru_nama, (SELECT COUNT(*) FROM users s WHERE s.kelompok_id = k.id AND s.peran='siswa' AND s.aktif=1) AS jumlah_siswa,
+    const where = u.peran === 'guru' ? 'WHERE (k.guru_id = ? OR k.guru2_id = ?)' : '';
+    const st = db.prepare(`SELECT k.*, g.nama AS guru_nama, g2.nama AS guru2_nama, (SELECT COUNT(*) FROM users s WHERE s.kelompok_id = k.id AND s.peran='siswa' AND s.aktif=1) AS jumlah_siswa,
       (SELECT halaman_per_hari FROM jadwal j WHERE j.kelompok_id = k.id AND j.siswa_id IS NULL AND j.mulai <= ? ORDER BY j.mulai DESC, j.id DESC LIMIT 1) AS target
-      FROM kelompok k LEFT JOIN users g ON g.id = k.guru_id ${where} ORDER BY k.nama`);
-    const { results } = u.peran === 'guru' ? await st.bind(hariIniWIB(), u.id).all() : await st.bind(hariIniWIB()).all();
+      FROM kelompok k LEFT JOIN users g ON g.id = k.guru_id LEFT JOIN users g2 ON g2.id = k.guru2_id ${where} ORDER BY k.nama`);
+    const { results } = u.peran === 'guru' ? await st.bind(hariIniWIB(), u.id, u.id).all() : await st.bind(hariIniWIB()).all();
     for (const k of results) if (!k.kode) { k.kode = await kodeBaru(db, k.nama); await db.prepare('UPDATE kelompok SET kode = ? WHERE id = ?').bind(k.kode, k.id).run(); }
     return json(results);
   },
@@ -464,11 +467,11 @@ const HANDLER = {
   'POST /kelompok': async ({ db, u, body }) => {
     wajibPeran(u, 'admin', 'guru');
     if (!body.nama) throw new HttpError('Nama kelompok wajib diisi');
-    if (u.peran === 'guru') body.guru_id = u.id;   // kelompok buatan guru otomatis dibimbing guru tsb
+    if (u.peran === 'guru') { body.guru_id = u.id; body.guru2_id = null; }  // kelompok buatan guru: guru tsb menjadi wali kelas
     const p = await ambilPengaturan(db);
     const mulai = validTgl(body.tgl_mulai) ? body.tgl_mulai : hariIniWIB();
-    const r = await db.prepare('INSERT INTO kelompok (nama, guru_id, hari_aktif, min_detik, tgl_mulai, keterangan) VALUES (?,?,?,?,?,?)')
-      .bind(body.nama, body.guru_id || null, body.hari_aktif || '0123456', parseInt(body.min_detik ?? 30), mulai, body.keterangan || null).run();
+    const r = await db.prepare('INSERT INTO kelompok (nama, guru_id, guru2_id, hari_aktif, min_detik, tgl_mulai, keterangan) VALUES (?,?,?,?,?,?,?)')
+      .bind(body.nama, body.guru_id || null, body.guru2_id || null, body.hari_aktif || '0123456', parseInt(body.min_detik ?? 30), mulai, body.keterangan || null).run();
     const kid = r.meta.last_row_id;
     const kode = await kodeBaru(db, body.nama);
     await db.batch([
@@ -484,15 +487,19 @@ const HANDLER = {
     await cekAksesKelompok(db, u, id);
     const k = await db.prepare('SELECT * FROM kelompok WHERE id = ?').bind(id).first();
     const v = { ...k, ...body };
-    if (u.peran === 'guru') { v.guru_id = k.guru_id; v.nama = body.nama || k.nama; }
-    await db.prepare('UPDATE kelompok SET nama=?, guru_id=?, hari_aktif=?, min_detik=?, tgl_mulai=?, keterangan=?, kode_aktif=? WHERE id=?')
-      .bind(v.nama, v.guru_id || null, String(v.hari_aktif ?? '0123456'), parseInt(v.min_detik ?? 30), v.tgl_mulai, v.keterangan || null, v.kode_aktif === 0 || v.kode_aktif === '0' ? 0 : 1, id).run();
+    if (u.peran === 'guru') { v.guru_id = k.guru_id; v.guru2_id = k.guru2_id; v.nama = body.nama || k.nama; }
+    await db.prepare('UPDATE kelompok SET nama=?, guru_id=?, guru2_id=?, hari_aktif=?, min_detik=?, tgl_mulai=?, keterangan=?, kode_aktif=? WHERE id=?')
+      .bind(v.nama, v.guru_id || null, v.guru2_id || null, String(v.hari_aktif ?? '0123456'), parseInt(v.min_detik ?? 30), v.tgl_mulai, v.keterangan || null, v.kode_aktif === 0 || v.kode_aktif === '0' ? 0 : 1, id).run();
     return json({ ok: true });
   },
 
   'DELETE /kelompok/:id': async ({ db, u, id }) => {
     wajibPeran(u, 'admin', 'guru');
     await cekAksesKelompok(db, u, id);
+    if (u.peran === 'guru') {
+      const kk = await db.prepare('SELECT guru_id FROM kelompok WHERE id = ?').bind(id).first();
+      if (kk.guru_id !== u.id) throw new HttpError('Hanya wali kelas atau admin yang dapat menghapus kelompok', 403);
+    }
     const n = await db.prepare(`SELECT COUNT(*) n FROM users WHERE kelompok_id = ? AND peran='siswa'`).bind(id).first();
     if (n.n > 0) throw new HttpError('Kelompok masih memiliki siswa. Pindahkan siswa terlebih dahulu.');
     await db.batch([
@@ -508,7 +515,7 @@ const HANDLER = {
     wajibPeran(u, 'admin', 'guru');
     await cekAksesKelompok(db, u, id);
     const p = await ambilPengaturan(db);
-    const k = await db.prepare('SELECT k.*, g.nama AS guru_nama FROM kelompok k LEFT JOIN users g ON g.id = k.guru_id WHERE k.id = ?').bind(id).first();
+    const k = await db.prepare('SELECT k.*, g.nama AS guru_nama, g2.nama AS guru2_nama FROM kelompok k LEFT JOIN users g ON g.id = k.guru_id LEFT JOIN users g2 ON g2.id = k.guru2_id WHERE k.id = ?').bind(id).first();
     const { results } = await db.prepare(`SELECT ${kolomSiswa} FROM users WHERE kelompok_id = ? AND peran = 'siswa' ORDER BY nama`).bind(id).all();
     const data = await statusBanyakSiswa(db, results, p, 7);
     const jadwal = await db.prepare('SELECT j.*, s.nama AS siswa_nama FROM jadwal j LEFT JOIN users s ON s.id = j.siswa_id WHERE j.kelompok_id = ? OR j.siswa_id IN (SELECT id FROM users WHERE kelompok_id = ?) ORDER BY j.mulai DESC, j.id DESC').bind(id, id).all();
@@ -663,7 +670,7 @@ const HANDLER = {
     wajibPeran(u, 'admin');
     const peran = url.searchParams.get('peran');
     const kel = url.searchParams.get('kelompok_id');
-    let q = `SELECT u.id, u.username, u.nama, u.peran, u.kelompok_id, u.nis, u.jk, u.tgl_mulai, u.halaman_mulai, u.aktif, u.wajib_ganti_pw, k.nama AS kelompok_nama
+    let q = `SELECT u.id, u.username, u.nama, u.peran, u.kelompok_id, u.nis, u.jk, u.tgl_mulai, u.halaman_mulai, u.aktif, u.wajib_ganti_pw, u.guru_agama, k.nama AS kelompok_nama
              FROM users u LEFT JOIN kelompok k ON k.id = u.kelompok_id WHERE 1=1`;
     const b = [];
     if (peran) { q += ' AND u.peran = ?'; b.push(peran); }
@@ -711,8 +718,9 @@ const HANDLER = {
     const uname = String(v.username).trim().toLowerCase();
     const dup = await db.prepare('SELECT id FROM users WHERE lower(username) = ? AND id != ?').bind(uname, id).first();
     if (dup) throw new HttpError('Username sudah dipakai');
-    await db.prepare('UPDATE users SET username=?, nama=?, peran=?, kelompok_id=?, nis=?, jk=?, aktif=? WHERE id=?')
-      .bind(uname, v.nama, v.peran, v.peran === 'siswa' ? (v.kelompok_id || null) : null, v.nis || null, v.jk || null, v.aktif ? 1 : 0, id).run();
+    await db.prepare('UPDATE users SET username=?, nama=?, peran=?, kelompok_id=?, nis=?, jk=?, aktif=?, guru_agama=? WHERE id=?')
+      .bind(uname, v.nama, v.peran, v.peran === 'siswa' ? (v.kelompok_id || null) : null, v.nis || null, v.jk || null, v.aktif ? 1 : 0, v.peran === 'guru' && (v.guru_agama === 1 || v.guru_agama === '1' || v.guru_agama === true) ? 1 : 0, id).run();
+    if (v.peran !== 'guru' || !(v.guru_agama === 1 || v.guru_agama === '1' || v.guru_agama === true)) await db.prepare('UPDATE kelompok SET guru2_id = NULL WHERE guru2_id = ?').bind(id).run();
     if (body.password) {
       await db.prepare('UPDATE users SET password=?, wajib_ganti_pw=1 WHERE id=?').bind(await hashPassword(String(body.password)), id).run();
       await db.prepare('DELETE FROM sesi WHERE user_id = ?').bind(id).run();
@@ -730,6 +738,7 @@ const HANDLER = {
       db.prepare('DELETE FROM jadwal WHERE siswa_id = ?').bind(id),
       db.prepare('DELETE FROM sesi WHERE user_id = ?').bind(id),
       db.prepare('UPDATE kelompok SET guru_id = NULL WHERE guru_id = ?').bind(id),
+      db.prepare('UPDATE kelompok SET guru2_id = NULL WHERE guru2_id = ?').bind(id),
       db.prepare('DELETE FROM users WHERE id = ?').bind(id),
     ]);
     return json({ ok: true });
@@ -788,6 +797,8 @@ async function buatUser(db, b) {
     .bind(username, String(b.nama).trim(), await hashPassword(password), peran, peran === 'siswa' ? (b.kelompok_id || null) : null,
       b.nis || null, b.jk || null, tglMulai, Math.max(1, Math.min(604, parseInt(b.halaman_mulai || 1))))
     .run();
+  const ga = String(b.guru_agama ?? '').trim().toLowerCase();
+  if (peran === 'guru' && ['1', 'ya', 'y', 'true', 'agama'].includes(ga)) await db.prepare('UPDATE users SET guru_agama = 1 WHERE id = ?').bind(r.meta.last_row_id).run();
   return { id: r.meta.last_row_id, username, password, nama: b.nama };
 }
 
@@ -827,7 +838,7 @@ async function infoPekan(db) {
 async function kelompokOwoj(db, u, kid) {
   if (u.peran === 'siswa') return u.kelompok_id || 0;
   if (kid === undefined || kid === null || kid === '') {
-    const k = await db.prepare('SELECT id FROM kelompok WHERE guru_id = ? ORDER BY nama LIMIT 1').bind(u.id).first();
+    const k = await db.prepare('SELECT id FROM kelompok WHERE guru_id = ? OR guru2_id = ? ORDER BY (guru_id = ?) DESC, nama LIMIT 1').bind(u.id, u.id, u.id).first();
     if (k) return k.id;
     if (u.peran === 'admin') { const a = await db.prepare('SELECT id FROM kelompok ORDER BY nama LIMIT 1').first(); return a ? a.id : 0; }
     return 0;
@@ -911,7 +922,7 @@ Object.assign(HANDLER, {
     const kelompok = kid ? await db.prepare('SELECT id, nama, min_detik FROM kelompok WHERE id = ?').bind(kid).first() : null;
     let kelompokSaya = [];
     if (u.peran !== 'siswa') {
-      const q = u.peran === 'admin' ? db.prepare('SELECT id, nama FROM kelompok ORDER BY nama') : db.prepare('SELECT id, nama FROM kelompok WHERE guru_id = ? ORDER BY nama').bind(u.id);
+      const q = u.peran === 'admin' ? db.prepare('SELECT id, nama FROM kelompok ORDER BY nama') : db.prepare('SELECT id, nama FROM kelompok WHERE guru_id = ? OR guru2_id = ? ORDER BY nama').bind(u.id, u.id);
       kelompokSaya = (await q.all()).results;
     }
     const st = statPeta(peta), stD = statPeta(petaDepan);
@@ -1087,7 +1098,7 @@ Object.assign(HANDLER, {
   'GET /gabung': async ({ db, u, url }) => {
     wajibPeran(u, 'siswa');
     const kode = String(url.searchParams.get('kode') || '').trim().toUpperCase();
-    const k = await db.prepare('SELECT k.id, k.nama, k.kode_aktif, g.nama AS guru_nama FROM kelompok k LEFT JOIN users g ON g.id = k.guru_id WHERE upper(k.kode) = ?').bind(kode).first();
+    const k = await db.prepare('SELECT k.id, k.nama, k.kode_aktif, g.nama AS guru_nama, g2.nama AS guru2_nama FROM kelompok k LEFT JOIN users g ON g.id = k.guru_id LEFT JOIN users g2 ON g2.id = k.guru2_id WHERE upper(k.kode) = ?').bind(kode).first();
     if (!k) throw new HttpError('Kode kelompok tidak ditemukan. Periksa kembali kodenya.', 404);
     if (k.kode_aktif === 0) throw new HttpError('Kode kelompok ini sedang dinonaktifkan oleh guru.');
     const target = await db.prepare('SELECT halaman_per_hari FROM jadwal WHERE kelompok_id = ? AND siswa_id IS NULL AND mulai <= ? ORDER BY mulai DESC, id DESC LIMIT 1').bind(k.id, hariIniWIB()).first();
@@ -1121,5 +1132,44 @@ Object.assign(HANDLER, {
     const r = await db.prepare(`UPDATE users SET kelompok_id = NULL WHERE id = ? AND kelompok_id = ? AND peran = 'siswa'`).bind(parseInt(body.siswa_id), id).run();
     if (!r.meta.changes) throw new HttpError('Siswa tidak ditemukan di kelompok ini');
     return json({ ok: true });
+  },
+});
+
+// =========================================================
+//  GURU AGAMA SEBAGAI PENDAMPING KE-2 KELOMPOK
+// =========================================================
+Object.assign(HANDLER, {
+  // daftar semua kelompok beserta wali kelas & guru agama (untuk guru agama / admin)
+  'GET /dampingan': async ({ db, u }) => {
+    wajibPeran(u, 'admin', 'guru');
+    if (u.peran === 'guru' && !u.guru_agama) throw new HttpError('Fitur ini khusus guru agama', 403);
+    const { results } = await db.prepare(`SELECT k.id, k.nama, k.guru_id, k.guru2_id, g.nama AS guru_nama, g2.nama AS guru2_nama,
+      (SELECT COUNT(*) FROM users s WHERE s.kelompok_id = k.id AND s.peran='siswa' AND s.aktif=1) AS jumlah_siswa
+      FROM kelompok k LEFT JOIN users g ON g.id = k.guru_id LEFT JOIN users g2 ON g2.id = k.guru2_id ORDER BY k.nama`).all();
+    const { results: guruAgama } = await db.prepare(`SELECT id, nama FROM users WHERE peran='guru' AND aktif=1 AND guru_agama=1 ORDER BY nama`).all();
+    return json({ kelompok: results, guru_agama: guruAgama });
+  },
+  // body: { guru_id (khusus admin), pasang: [id kelompok], lepas: [id kelompok] }
+  'POST /dampingan': async ({ db, u, body }) => {
+    wajibPeran(u, 'admin', 'guru');
+    let gid = u.id;
+    if (u.peran === 'admin') gid = parseInt(body.guru_id);
+    else if (!u.guru_agama) throw new HttpError('Fitur ini khusus guru agama', 403);
+    const g = await db.prepare(`SELECT id, nama, guru_agama FROM users WHERE id = ? AND peran = 'guru'`).bind(gid).first();
+    if (!g) throw new HttpError('Guru tidak ditemukan');
+    if (!g.guru_agama) throw new HttpError(`${g.nama} belum ditandai sebagai Guru Agama. Ubah di menu Pengguna.`);
+    const pasang = (body.pasang || []).map(Number).filter(Boolean).slice(0, 80);
+    const lepas = (body.lepas || []).map(Number).filter(Boolean).slice(0, 80);
+    const st = [], gagal = [];
+    for (const kid of pasang) {
+      const k = await db.prepare('SELECT nama, guru_id, guru2_id FROM kelompok WHERE id = ?').bind(kid).first();
+      if (!k) continue;
+      if (k.guru_id === gid) { gagal.push(`${k.nama}: sudah menjadi wali kelas`); continue; }
+      if (k.guru2_id && k.guru2_id !== gid && u.peran !== 'admin') { gagal.push(`${k.nama}: sudah ada guru agama lain`); continue; }
+      st.push(db.prepare('UPDATE kelompok SET guru2_id = ? WHERE id = ?').bind(gid, kid));
+    }
+    for (const kid of lepas) st.push(db.prepare('UPDATE kelompok SET guru2_id = NULL WHERE id = ? AND guru2_id = ?').bind(kid, gid));
+    if (st.length) await db.batch(st);
+    return json({ ok: true, diproses: st.length, gagal });
   },
 });
