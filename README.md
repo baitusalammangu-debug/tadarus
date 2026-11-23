@@ -32,6 +32,7 @@ Berjalan di **Cloudflare Pages + D1** (gratis), kode disimpan di **GitHub**.
 - Setiap juz OWOJ yang tuntas mendapat poin (default 50) yang ikut dijumlahkan di peringkat.
 - Guru: rekap peserta (sudah/belum memilih, progres, tuntas), unduh CSV, riwayat pekan-pekan sebelumnya.
 - Admin (Pengaturan): aktif/nonaktif, hari awal pekan (default Senin), aturan pembagian juz, poin OWOJ.
+- **Kunci pekan depan**: pemesanan juz untuk pekan depan baru dibuka setelah pekan ini khatam (30 juz tuntas), agar juz yang masih kosong diselesaikan lebih dulu. Bisa dimatikan di Pengaturan.
 - Bacaan OWOJ dicatat terpisah dan **tidak mengubah** target/hutang tadarus harian.
 
 **Tadarus guru** — guru juga mendapat target harian (default 2 halaman/hari, diatur admin) lengkap dengan hutang, tabungan, poin, riwayat, dan notifikasi lewat menu **Tadarus Saya**. Admin melihat rekap tadarus semua guru di Dasbor.

@@ -1268,6 +1268,7 @@ async function viewPengaturan() {
       <div class="field"><label>Status program</label><select class="input" name="owoj_aktif"><option value="1" ${p.owoj_aktif !== '0' ? 'selected' : ''}>Aktif</option><option value="0" ${p.owoj_aktif === '0' ? 'selected' : ''}>Nonaktif</option></select></div>
       <div class="field"><label>Pekan dimulai hari</label><select class="input" name="owoj_hari_mulai">${HARI.map((h, i) => `<option value="${i}" ${String(i) === String(p.owoj_hari_mulai ?? '1') ? 'selected' : ''}>${h}</option>`).join('')}</select></div>
       <div class="field"><label>Cakupan grup OWOJ</label><select class="input" name="owoj_cakupan"><option value="sekolah" ${p.owoj_cakupan !== 'kelompok' ? 'selected' : ''}>Satu sekolah/lembaga — semua murid & guru berbagi satu peta 30 juz</option><option value="kelompok" ${p.owoj_cakupan === 'kelompok' ? 'selected' : ''}>Per kelompok — tiap kelas punya peta 30 juz sendiri</option></select></div>
+      <div class="field"><label>Pemesanan juz pekan depan</label><select class="input" name="owoj_kunci_depan"><option value="1" ${p.owoj_kunci_depan !== '0' ? 'selected' : ''}>Dikunci sampai pekan ini khatam (30 juz tuntas)</option><option value="0" ${p.owoj_kunci_depan === '0' ? 'selected' : ''}>Bebas — boleh memesan kapan saja</option></select></div>
       <div class="field"><label>Maksimal juz per orang per pekan</label><input class="input" type="number" min="0" max="30" name="owoj_maks_juz" value="${esc(p.owoj_maks_juz ?? 5)}"><div class="tiny muted">0 = tanpa batas</div></div>
       <div class="field"><label>Pembagian juz</label><select class="input" name="owoj_juz_unik"><option value="1" ${p.owoj_juz_unik !== '0' ? 'selected' : ''}>Sistem putaran — juz bisa diambil lagi setelah ke-30 juz diambil (khatam bersama)</option><option value="0" ${p.owoj_juz_unik === '0' ? 'selected' : ''}>Bebas — juz mana pun boleh dipilih bersamaan</option></select></div>
       <div class="field"><label>Poin per juz OWOJ tuntas</label><input class="input" type="number" min="0" name="owoj_poin" value="${esc(p.owoj_poin ?? 50)}"></div>
@@ -1329,7 +1330,7 @@ async function viewOwoj() {
   const modeDepan = sessionStorage.getItem('owoj_mode') === 'depan';
   if (modeDepan) { d.peta = d.peta_depan; d.stat = d.stat_depan; d.pekan = d.pekan_depan; d.akhir = d.akhir_depan; }
   const pekanIni = !modeDepan && d.pekan === d.pekan_ini;
-  const bisaPilih = d.aktif && (pekanIni || modeDepan);
+  const bisaPilih = d.aktif && (pekanIni || (modeDepan && !d.kunci_depan));
   const rekap = guru && d.kelompok_id ? await api(`/owoj/rekap/${d.kelompok_id}?pekan=${d.pekan}`).catch(() => null) : null;
   const saya = (modeDepan ? d.saya_depan : pekanIni ? d.saya : []) || [];
   const st = d.stat;
@@ -1357,7 +1358,14 @@ async function viewOwoj() {
       </div></div>`;
   };
 
-  const kartuSaya = !bisaPilih ? '' : `
+  const kartuKunci = modeDepan && d.kunci_depan ? `
+    <div class="card kunci-depan"><div class="row" style="gap:12px;align-items:flex-start"><div class="kunci-ik">🔒</div><div style="flex:1">
+      <b>Pemesanan juz pekan depan belum dibuka</b>
+      <p class="small" style="margin:4px 0 8px">Pekan ini belum khatam. Selesaikan dulu juz pekan ini bersama-sama — pemesanan pekan depan otomatis terbuka setelah <b>30 juz pekan ini tuntas</b>.</p>
+      <div class="progress"><i style="width:${(d.ini_tuntas / 30) * 100}%"></i></div>
+      <div class="tiny muted" style="margin-top:4px">${d.ini_tuntas}/30 juz tuntas pekan ini${d.ini_kosong ? ` · <b>${d.ini_kosong} juz belum diambil</b>` : ''}</div>
+      <button class="btn kecil" style="margin-top:10px" id="ke-ini">Ambil juz pekan ini</button></div></div></div>` : '';
+  const kartuSaya = !bisaPilih ? kartuKunci : `
     <div class="card owoj-saya">
       <div class="row spread"><h3 style="margin:0">Juz ${guru ? 'saya' : 'saya'} ${modeDepan ? 'pekan depan' : 'pekan ini'} (${saya.length})</h3>
         <span class="tiny muted">${d.maks_juz > 0 ? `maks. ${d.maks_juz} juz/orang` : 'tanpa batas juz'}</span></div>
@@ -1401,7 +1409,7 @@ async function viewOwoj() {
     <div class="row spread"><div><h1 style="margin:0">OWOJ</h1><div class="small muted">One Week One Juz · khatam bersama setiap pekan</div></div>
       ${guru && d.kelompok_saya.length ? `<select class="input" id="owoj-k" style="width:auto">${d.kelompok_saya.map((k) => `<option value="${k.id}" ${k.id === d.kelompok_id ? 'selected' : ''}>${esc(k.nama)}</option>`).join('')}</select>` : ''}</div>
     ${!d.aktif ? '<div class="alert info" style="margin-top:12px">Program OWOJ sedang tidak aktif.</div>' : ''}
-    <div class="tabs" style="margin:14px 0 0"><button id="tab-ini" class="${modeDepan ? '' : 'aktif'}">Pekan ini</button><button id="tab-depan" class="${modeDepan ? 'aktif' : ''}">Pekan depan${d.saya_depan.length ? ` (${d.saya_depan.length})` : ''}</button></div>
+    <div class="tabs" style="margin:14px 0 0"><button id="tab-ini" class="${modeDepan ? '' : 'aktif'}">Pekan ini</button><button id="tab-depan" class="${modeDepan ? 'aktif' : ''}">${d.kunci_depan ? '🔒 ' : ''}Pekan depan${d.saya_depan.length ? ` (${d.saya_depan.length})` : ''}</button></div>
     <div class="owoj-hero">
       <div class="row spread"><div><div class="small" style="opacity:.85">${modeDepan ? 'Pekan depan' : pekanIni ? 'Pekan ini' : 'Pekan'}</div><b style="font-size:1.1rem">${rentangPekan(d)}</b></div>
         <div style="text-align:right">${pekanIni ? `<b style="font-size:1.6rem">${d.sisa_hari}</b><div class="tiny">hari lagi</div>` : ''}</div></div>
@@ -1414,7 +1422,7 @@ async function viewOwoj() {
     ${kartuSaya}
     <div class="card"><div class="row spread"><h3 style="margin:0">Peta Juz</h3>
       <span class="tiny muted">${d.cakupan === 'sekolah' ? 'Satu peta untuk semua murid & guru' : 'Peta per kelompok'}</span></div>
-      <div class="legend" style="margin:6px 0 10px"><span><i style="background:#fff;border:1px solid var(--garis)"></i>Tersedia (putaran ${st.putaran})</span><span><i style="background:var(--kuning-muda)"></i>Sudah diambil</span><span><i style="background:var(--hijau-muda)"></i>Tuntas</span><span><i style="background:var(--hijau)"></i>Juz saya</span><span><b>2×</b> = diambil 2 kali</span></div>
+      <div class="legend" style="margin:6px 0 10px"><span><i style="background:#fff;border:1px solid var(--garis)"></i>${modeDepan && d.kunci_depan ? 'Terkunci sampai pekan ini khatam' : `Tersedia (putaran ${st.putaran})`}</span><span><i style="background:var(--kuning-muda)"></i>Sudah diambil</span><span><i style="background:var(--hijau-muda)"></i>Tuntas</span><span><i style="background:var(--hijau)"></i>Juz saya</span><span><b>2×</b> = diambil 2 kali</span></div>
       <div class="juz-grid">${grid}</div>
       <p class="tiny muted" style="margin-bottom:0">Sistem putaran: setelah ke-30 juz diambil, semua juz terbuka lagi untuk putaran berikutnya. Setiap putaran yang 30 juznya tuntas = 1× khatam.</p></div>
     ${tabelGuru}${daftarPeserta}
@@ -1431,6 +1439,7 @@ async function viewOwoj() {
     if (b.dataset.kunci) {
       const ps = peserta(j);
       if (saya.some((x) => x.juz === j && !x.selesai_pada)) return toast(`Juz ${j} sudah ada di daftar ${kamu}`);
+      if (modeDepan && d.kunci_depan) return toast(`Pekan ini belum khatam (${d.ini_tuntas}/30 juz tuntas). Pemesanan pekan depan dibuka setelah 30 juz pekan ini tuntas.`, true);
       if (!bisaPilih) return toast('Hanya bisa memilih juz untuk pekan ini atau pekan depan');
       if (sisaKuota <= 0) return toast(`Batas ${d.maks_juz} juz per pekan sudah tercapai`, true);
       return toast((ps.length ? ps.map((x) => `${x.nama}: ${x.selesai_pada ? 'tuntas' : x.dibaca + '/' + x.total + ' hlm'}`).join(' · ') + '. ' : '') + `Juz ${j} baru bisa diambil lagi pada putaran berikutnya.`);
@@ -1445,6 +1454,7 @@ async function viewOwoj() {
     await coba(() => api('/owoj/batal', { method: 'POST', body: { id: +b.dataset.batal } }), 'Pilihan dibatalkan'); viewOwoj();
   }));
   $('#tab-ini').onclick = () => { sessionStorage.removeItem('owoj_mode'); viewOwoj(); };
+  const ki = $('#ke-ini'); if (ki) ki.onclick = () => $('#tab-ini').click();
   $('#tab-depan').onclick = () => { sessionStorage.setItem('owoj_mode', 'depan'); sessionStorage.removeItem('owoj_pekan'); viewOwoj(); };
   const sk = $('#owoj-k'); if (sk) sk.onchange = () => { sessionStorage.setItem('owoj_k', sk.value); viewOwoj(); };
   const geser = (n) => { sessionStorage.setItem('owoj_pekan', tambahTgl(d.pekan, n)); viewOwoj(); };

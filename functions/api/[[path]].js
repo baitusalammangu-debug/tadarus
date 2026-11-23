@@ -299,6 +299,7 @@ const MIGRASI = [
   "ALTER TABLE kelompok ADD COLUMN guru2_id INTEGER",
   "ALTER TABLE users ADD COLUMN guru_agama INTEGER DEFAULT 0",
   "INSERT OR IGNORE INTO pengaturan (kunci, nilai) VALUES ('owoj_maks_juz','5')",
+  "INSERT OR IGNORE INTO pengaturan (kunci, nilai) VALUES ('owoj_kunci_depan','1')",
 ];
 async function pastikanSkema(db) {
   if (skemaSiap) return;
@@ -751,7 +752,7 @@ const HANDLER = {
 
   'PUT /pengaturan': async ({ db, u, body }) => {
     wajibPeran(u, 'admin');
-    const izin = ['nama_lembaga', 'sub_judul', 'poin_harian', 'poin_khatam', 'default_halaman_per_hari', 'logo', 'owoj_aktif', 'owoj_hari_mulai', 'owoj_juz_unik', 'owoj_poin', 'owoj_hitung_tadarus', 'target_guru', 'tadarus_guru_aktif', 'izin_cetak', 'owoj_cakupan', 'owoj_maks_juz'];
+    const izin = ['nama_lembaga', 'sub_judul', 'poin_harian', 'poin_khatam', 'default_halaman_per_hari', 'logo', 'owoj_aktif', 'owoj_hari_mulai', 'owoj_juz_unik', 'owoj_poin', 'owoj_hitung_tadarus', 'target_guru', 'tadarus_guru_aktif', 'izin_cetak', 'owoj_cakupan', 'owoj_maks_juz', 'owoj_kunci_depan'];
     const stmts = Object.entries(body).filter(([k]) => izin.includes(k))
       .map(([k, v]) => db.prepare('INSERT INTO pengaturan (kunci, nilai) VALUES (?,?) ON CONFLICT(kunci) DO UPDATE SET nilai = excluded.nilai').bind(k, String(v ?? '')));
     if (stmts.length) await db.batch(stmts);
@@ -819,7 +820,7 @@ async function peringkat(db, kelompokId) {
 // =========================================================
 const JUZ = [[1,1,21],[2,22,41],[3,42,61],[4,62,81],[5,82,101],[6,102,121],[7,122,141],[8,142,161],[9,162,181],[10,182,201],[11,202,221],[12,222,241],[13,242,262],[14,262,281],[15,282,301],[16,302,321],[17,322,341],[18,342,361],[19,362,382],[20,382,401],[21,401,421],[22,422,441],[23,441,461],[24,462,481],[25,482,502],[26,502,521],[27,522,541],[28,542,561],[29,562,581],[30,582,604]];
 const halJuz = (j) => { const r = JUZ[j - 1]; return { awal: r[1], akhir: r[2], total: r[2] - r[1] + 1 }; };
-const OWOJ_DEF = { owoj_aktif: '1', owoj_hari_mulai: '1', owoj_juz_unik: '1', owoj_poin: '50', owoj_cakupan: 'sekolah', owoj_maks_juz: '5' };
+const OWOJ_DEF = { owoj_aktif: '1', owoj_hari_mulai: '1', owoj_juz_unik: '1', owoj_poin: '50', owoj_cakupan: 'sekolah', owoj_maks_juz: '5', owoj_kunci_depan: '1' };
 // cakupan 'sekolah' = semua murid & guru berbagi satu peta 30 juz; 'kelompok' = peta per kelompok
 const perKelompok = (p) => p.owoj_cakupan === 'kelompok';
 function pekanDari(tgl, hariMulai) {
@@ -926,6 +927,10 @@ Object.assign(HANDLER, {
       kelompokSaya = (await q.all()).results;
     }
     const st = statPeta(peta), stD = statPeta(petaDepan);
+    // kunci pemesanan pekan depan selama pekan berjalan belum khatam (30 juz tuntas)
+    const stIni = pekan === I.pekan ? st : statPeta(await petaJuz(db, kid, I.pekan, sekolah));
+    const kunciDepan = (I.p.owoj_kunci_depan ?? '1') !== '0' && stIni.khatam < 1;
+    const tuntasIni = stIni.tuntas_putaran, kosongIni = stIni.ambil.slice(1).filter((n) => n <= stIni.khatam).length; // juz yang belum diambil menuju khatam berikutnya
     delete st.ambil; delete st.tuntas; delete stD.ambil; delete stD.tuntas;
     return json({
       aktif: I.p.owoj_aktif !== '0', hari_ini: I.hari_ini, pekan, pekan_ini: I.pekan, akhir: pekanDari(pekan, parseInt(I.p.owoj_hari_mulai)).akhir, sisa_hari: I.sisa_hari,
@@ -934,6 +939,7 @@ Object.assign(HANDLER, {
       saya, peta, stat: st, riwayat: riwayat.results, ringkas, min_detik: kelompok?.min_detik ?? 30,
       pekan_depan: I.pekan_depan, akhir_depan: tambahHari(I.pekan_depan, 6), saya_depan: sayaDepan, peta_depan: petaDepan, stat_depan: stD,
       izin_cetak: (I.p.izin_cetak ?? '1') !== '0', cakupan: sekolah ? 'sekolah' : 'kelompok',
+      kunci_depan: kunciDepan, ini_tuntas: stIni.khatam >= 1 ? 30 : tuntasIni, ini_kosong: stIni.khatam >= 1 ? 0 : kosongIni,
     });
   },
 
@@ -946,6 +952,13 @@ Object.assign(HANDLER, {
     const kid = await kelompokOwoj(db, u, body.kelompok_id);
     const depan = body.untuk === 'depan';
     const pekan = depan ? I.pekan_depan : I.pekan;
+    if (depan && (I.p.owoj_kunci_depan ?? '1') !== '0') {
+      const stIni = statPeta(await petaJuz(db, kid, I.pekan, !perKelompok(I.p)));
+      if (stIni.khatam < 1) {
+        const kosong = []; for (let j = 1; j <= 30; j++) if (stIni.ambil[j] === 0) kosong.push(j);
+        throw new HttpError(`Pekan ini belum khatam (${stIni.tuntas_putaran}/30 juz tuntas). Pemesanan juz pekan depan dibuka setelah 30 juz pekan ini tuntas.` + (kosong.length ? ` Juz yang belum diambil pekan ini: ${kosong.join(', ')}.` : ''));
+      }
+    }
     const milik = await pilihanSaya(db, u.id, pekan);
     const maks = parseInt(I.p.owoj_maks_juz ?? '5');
     if (maks > 0 && milik.length >= maks) throw new HttpError(`Maksimal ${maks} juz per orang dalam satu pekan.`);

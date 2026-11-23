@@ -297,3 +297,6 @@ table.tbl{width:100%;border-collapse:collapse;font-size:.88rem}
 .dmp-row:last-child{border-bottom:0}
 .dmp-row.on{background:var(--hijau-muda)}
 .dmp-row input{margin-top:4px;accent-color:var(--hijau)}
+
+.kunci-depan{border:2px dashed var(--emas);background:var(--emas-muda)}
+.kunci-ik{font-size:1.8rem;line-height:1}
