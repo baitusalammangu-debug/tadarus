@@ -556,10 +556,10 @@ async function renderBaca(st) {
         <span class="muted">Dibaca hari ini ${st.dibaca_hari_ini} hlm${st.hutang ? ` · hutang ${st.hutang}` : ''}</span>
         <div class="progress" style="margin-top:6px"><i style="width:${pct}%"></i></div>
       </div>
+      ${st.bisa_batal ? `<button class="btn putih btn-kembali" id="btn-kembali" title="Batalkan tanda selesai terakhir dan kembali ke halaman ${st.halaman_terakhir || 'sebelumnya'}">‹ Kembali</button>` : ''}
       <button class="btn besar" id="btn-selesai" disabled>✓ Selesai</button>
     </div></div>
     <div class="row" style="justify-content:center;margin-top:4px">
-      ${st.dibaca_hari_ini ? '<button class="btn putih kecil" id="btn-batal">↩ Batalkan tanda terakhir</button>' : ''}
       <a class="btn putih kecil" href="#/mushaf/${n}">Buka mode mushaf bebas</a>
       ${S.me.pengaturan.izin_cetak !== '0' ? `<button class="btn putih kecil" onclick="laporCetak('tadarus')">📗 Lapor mushaf cetak</button>` : ''}
     </div>`);
@@ -599,10 +599,13 @@ async function renderBaca(st) {
       sisa = m ? parseInt(m[1]) : 0; clearInterval(timerBaca); tick(); timerBaca = setInterval(tick, 1000);
     }
   };
-  const bb = $('#btn-batal');
-  if (bb) bb.onclick = async () => {
-    if (!confirm('Batalkan tanda halaman terakhir?')) return;
-    await coba(() => api('/saya/batal', { method: 'POST' }), 'Tanda terakhir dibatalkan');
+  const bk = $('#btn-kembali');
+  if (bk) bk.onclick = async () => {
+    const h = st.halaman_terakhir;
+    if (!confirm(`Kembali ke halaman ${h || 'sebelumnya'}?\n\nTanda "selesai" halaman ${h || 'terakhir'} akan dibatalkan, lalu halaman itu dibuka lagi untuk dibaca ulang.`)) return;
+    bk.disabled = true;
+    try { await api('/saya/batal', { method: 'POST' }); toast(`Kembali ke halaman ${h || 'sebelumnya'} ✓`); }
+    catch (e) { toast(e.message, true); }
     viewBaca();
   };
 }
@@ -1493,10 +1496,10 @@ async function renderOwojBaca(pl, minDetik, sisaHari) {
       <div class="ket"><b>OWOJ Juz ${pl.juz}: ${pl.dibaca}/${pl.total} hlm</b>
         <span class="muted">Sisa ${pl.total - pl.dibaca} hlm · ${sisaHari} hari lagi</span>
         <div class="progress" style="margin-top:6px"><i style="width:${pl.persen}%"></i></div></div>
+      ${pl.dibaca ? `<button class="btn putih btn-kembali" id="owoj-undo" title="Batalkan tanda selesai terakhir dan kembali ke halaman ${n - 1}">‹ Kembali</button>` : ''}
       <button class="btn besar emas" id="btn-owoj" disabled>✓ Selesai</button>
     </div></div>
     <div class="row" style="justify-content:center;margin-top:4px">
-      ${pl.dibaca ? '<button class="btn putih kecil" id="owoj-undo">↩ Batalkan tanda terakhir</button>' : ''}
       <a class="btn putih kecil" href="#/owoj">Peta juz</a></div>`);
   main.style.paddingTop = '0';
   pasangBarPembaca(main, d);
@@ -1521,7 +1524,12 @@ async function renderOwojBaca(pl, minDetik, sisaHari) {
     }
   };
   const u = $('#owoj-undo');
-  if (u) u.onclick = async () => { if (!confirm('Batalkan tanda halaman terakhir?')) return; await coba(() => api('/owoj/batal-baca', { method: 'POST', body: { id: pl.id } }), 'Dibatalkan'); viewOwojBaca(pl.id); };
+  if (u) u.onclick = async () => {
+    if (!confirm(`Kembali ke halaman ${n - 1}?\n\nTanda "selesai" halaman ${n - 1} akan dibatalkan, lalu halaman itu dibuka lagi untuk dibaca ulang.`)) return;
+    u.disabled = true;
+    await coba(() => api('/owoj/batal-baca', { method: 'POST', body: { id: pl.id } }), `Kembali ke halaman ${n - 1} ✓`).catch(() => {});
+    viewOwojBaca(pl.id);
+  };
 }
 
 // =========================================================

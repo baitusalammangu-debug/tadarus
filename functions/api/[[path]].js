@@ -408,12 +408,15 @@ const HANDLER = {
     if (!s.tgl_mulai) { s.tgl_mulai = hariIniWIB(); await db.prepare('UPDATE users SET tgl_mulai = ? WHERE id = ?').bind(s.tgl_mulai, u.id).run(); }
     const [r] = await statusBanyakSiswa(db, [s], p, hari);
     const pengumuman = await db.prepare('SELECT p.*, u.nama AS oleh_nama FROM pengumuman p LEFT JOIN users u ON u.id = p.oleh WHERE p.kelompok_id IS NULL OR p.kelompok_id = ? ORDER BY p.id DESC LIMIT 5').bind(s.kelompok_id || 0).all();
-    const terakhir = await db.prepare('SELECT waktu FROM bacaan WHERE siswa_id = ? ORDER BY id DESC LIMIT 1').bind(u.id).first();
+    const terakhir = await db.prepare('SELECT waktu, tanggal, sumber, halaman FROM bacaan WHERE siswa_id = ? ORDER BY id DESC LIMIT 1').bind(u.id).first();
     return json({
       ...r.status,
       notif: pesanNotif(r.status, u.nama, u.peran),
       min_detik: r.kelompok?.min_detik ?? 30,
       terakhir_baca: terakhir?.waktu || null,
+      // tanda terakhir bisa dibatalkan bila dibuat hari ini lewat aplikasi (untuk tombol "Kembali")
+      bisa_batal: !!(terakhir && terakhir.tanggal === hariIniWIB() && terakhir.sumber === 'app'),
+      halaman_terakhir: terakhir?.halaman || null,
       pengumuman: pengumuman.results,
       hari_ini: hariIniWIB(),
     });
@@ -434,7 +437,7 @@ const HANDLER = {
     }
     await db.prepare('INSERT INTO bacaan (siswa_id, halaman, tanggal, sumber, oleh) VALUES (?,?,?,?,?)').bind(u.id, hlm, hariIniWIB(), 'app', u.id).run();
     const [r2] = await statusBanyakSiswa(db, [s], p);
-    return json({ ...r2.status, notif: pesanNotif(r2.status, u.nama, u.peran), khatam_baru: r2.status.khatam > r.status.khatam });
+    return json({ ...r2.status, notif: pesanNotif(r2.status, u.nama, u.peran), khatam_baru: r2.status.khatam > r.status.khatam, bisa_batal: true, halaman_terakhir: hlm });
   },
 
   // batalkan tanda terakhir (hanya bacaan hari ini lewat aplikasi)
